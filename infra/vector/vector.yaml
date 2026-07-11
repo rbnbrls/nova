@@ -23,6 +23,9 @@ sinks:
     inputs: [docker_enriched]
     uri: "${OPENOBSERVE_URL}/api/${OPENOBSERVE_ORG}/docker/_json"
     method: post
+    # OpenObserve is reached over LAN via Coolify's Traefik with a self-signed cert.
+    tls:
+      verify_certificate: false
     auth:
       strategy: basic
       user: "${OPENOBSERVE_USER}"
@@ -38,6 +41,8 @@ sinks:
     type: prometheus_remote_write
     inputs: [host]
     endpoint: "${OPENOBSERVE_URL}/api/${OPENOBSERVE_ORG}/prometheus/api/v1/write"
+    tls:
+      verify_certificate: false
     auth:
       strategy: basic
       user: "${OPENOBSERVE_USER}"
