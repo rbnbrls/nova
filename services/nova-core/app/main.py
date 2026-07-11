@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Query, BackgroundTasks, Response, HTTPException
+from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import llm, db
 from .agent import run_agent
@@ -78,14 +80,88 @@ async def chat_completions(req: ChatCompletionRequest, user: str | None = None) 
 
 @app.get("/dashboard/tasks")
 async def dashboard_tasks() -> dict:
-    # TODO(Phase 5/8): SELECT active tasks with due_at, grouped by assignee.
-    return {"tasks": []}
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT t.title, t.due_at, u.name as assignee
+            FROM tasks t
+            LEFT JOIN users u ON t.assignee_id = u.id
+            WHERE t.status = 'active'
+            ORDER BY t.due_at ASC NULLS LAST, t.created_at ASC
+            """
+        )
+    tasks = []
+    for r in rows:
+        due_iso = r["due_at"].isoformat() if r["due_at"] else None
+        tasks.append({
+            "title": r["title"],
+            "due_at": due_iso,
+            "assignee": r["assignee"] or "unassigned"
+        })
+    return {"tasks": tasks}
 
 
 @app.get("/dashboard/events")
 async def dashboard_events() -> dict:
-    # TODO(Phase 5/8): fetch upcoming CalDAV events.
-    return {"events": []}
+    from datetime import datetime, timezone, timedelta
+    import zoneinfo
+    from .tools.calendar import _get_calendar
+    
+    tz = zoneinfo.ZoneInfo(settings.nova_timezone)
+    now_local = datetime.now(tz)
+    start_dt = datetime.combine(now_local.date(), datetime.min.time(), tzinfo=tz)
+    end_dt = start_dt + timedelta(days=7)
+    
+    try:
+        calendar = _get_calendar()
+        events = calendar.search(start=start_dt, end=end_dt, event=True, expand=True)
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch calendar: {e}")
+        return {"events": []}
+        
+    events_list = []
+    for ev in events:
+        vevent = ev.vobject_instance.vevent
+        summary = vevent.summary.value if hasattr(vevent, "summary") else "No Title"
+        dtstart = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
+        dtend = vevent.dtend.value if hasattr(vevent, "dtend") else None
+        location = vevent.location.value if hasattr(vevent, "location") and vevent.location.value else ""
+        events_list.append({
+            "title": summary,
+            "start": dtstart.isoformat() if dtstart else "",
+            "end": dtend.isoformat() if dtend else "",
+            "location": location
+        })
+    return {"events": events_list}
+
+
+@app.get("/dashboard")
+async def dashboard_redirect():
+    return RedirectResponse(url="/static/index.html")
+
+
+@app.get("/dashboard/stream")
+async def dashboard_stream():
+    import asyncio
+    import json
+    
+    async def event_generator():
+        while True:
+            try:
+                tasks_data = await dashboard_tasks()
+                events_data = await dashboard_events()
+                payload = {
+                    "tasks": tasks_data["tasks"],
+                    "events": events_data["events"]
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+            except Exception as e:
+                print(f"[ERROR] SSE generator error: {e}")
+            await asyncio.sleep(15)
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 
 @app.get("/webhooks/whatsapp")
@@ -115,4 +191,10 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks) 
         
     background_tasks.add_task(process_incoming_whatsapp, payload)
     return {"status": "accepted"}
+
+
+import os
+static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 

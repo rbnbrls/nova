@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Household Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Plus+Jakarta+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <div class="logo-area">
+                <h1>Nova <span>Household</span></h1>
+                <div class="status-indicator">
+                    <span class="pulse-dot"></span>
+                    <span class="status-text">Live Connection</span>
+                </div>
+            </div>
+            <div class="time-area" id="live-clock">--:--:--</div>
+        </header>
+
+        <main class="dashboard-grid">
+            <!-- Left Side: Tasks -->
+            <section class="dashboard-card glass-panel" id="tasks-panel">
+                <div class="card-header">
+                    <h2>Active Todos</h2>
+                    <span class="badge" id="tasks-count">0</span>
+                </div>
+                <div class="assignee-groups" id="tasks-content">
+                    <div class="placeholder-loader">Connecting to task feed...</div>
+                </div>
+            </section>
+
+            <!-- Right Side: Calendar Events -->
+            <section class="dashboard-card glass-panel" id="events-panel">
+                <div class="card-header">
+                    <h2>Agenda (7 Days)</h2>
+                    <span class="badge badge-accent" id="events-count">0</span>
+                </div>
+                <div class="events-list" id="events-content">
+                    <div class="placeholder-loader">Syncing calendar...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
