@@ -24,9 +24,20 @@ class Settings(BaseSettings):
     postgres_user: str = "nova"
     postgres_password: str = ""
 
+    # Calendar (CalDAV)
+    caldav_url: str = "http://radicale:5232/"
+
+
+    # MS Graph Email Configuration
+    azure_tenant_id: str = ""
+    azure_client_id: str = ""
+    azure_client_secret: str = ""
+    azure_mailbox_email: str = ""
+
     # Household identity: "number:name,number:name"
     nova_whatsapp_users: str = ""
     whatsapp_app_secret: str = ""
+
 
     @property
     def database_url(self) -> str:

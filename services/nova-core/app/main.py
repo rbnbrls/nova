@@ -10,14 +10,26 @@ Channel webhooks (WhatsApp, Phase 4) will be added under /webhooks/*.
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
-from . import llm
+from . import llm, db
 from .agent import run_agent
 from .config import settings
 from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice
 
-app = FastAPI(title="Nova Core", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize the database pool
+    await db.get_pool()
+    yield
+    # Close the database pool
+    await db.close_pool()
+
+
+app = FastAPI(title="Nova Core", version="0.1.0", lifespan=lifespan)
+
 
 
 @app.get("/health")

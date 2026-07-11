@@ -1,10 +1,21 @@
-"""Calendar tool (self-hosted CalDAV) — STUB.
-
-Phase 5 wires these to the CalDAV server (HA local calendar or Radicale/Nextcloud).
-"""
+"""Calendar tool using self-hosted CalDAV (Radicale)."""
 from __future__ import annotations
 
+from datetime import datetime
+import caldav
+from icalendar import Calendar as iCalendar, Event as iEvent
+
 from .base import tool
+from ..config import settings
+
+
+def _get_calendar() -> caldav.Calendar:
+    client = caldav.DAVClient(url=settings.caldav_url)
+    principal = client.principal()
+    calendars = principal.calendars()
+    if not calendars:
+        return principal.make_calendar(name="Household", calendar_id="household")
+    return calendars[0]
 
 
 @tool(
@@ -20,8 +31,36 @@ from .base import tool
     },
 )
 async def list_events(start: str, end: str) -> str:
-    # TODO(Phase 5): query CalDAV for events between start and end.
-    return f"[stub] No events between {start} and {end}."
+    try:
+        start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    except ValueError:
+        return f"Error: Invalid date format: start='{start}', end='{end}'"
+
+    calendar = _get_calendar()
+    # Search for events expanding recurrences
+    events = calendar.search(start=start_dt, end=end_dt, event=True, expand=True)
+
+    if not events:
+        return f"No events between {start} and {end}."
+
+    lines = []
+    for i, event in enumerate(events, 1):
+        vobject = event.vobject_instance
+        vevent = vobject.vevent
+        summary = vevent.summary.value if hasattr(vevent, "summary") else "No Title"
+        
+        # Get start/end values (can be datetime.date or datetime.datetime)
+        dtstart = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
+        dtend = vevent.dtend.value if hasattr(vevent, "dtend") else None
+        
+        dtstart_str = dtstart.isoformat() if dtstart else "unknown"
+        dtend_str = dtend.isoformat() if dtend else "unknown"
+        location_str = f" @ {vevent.location.value}" if hasattr(vevent, "location") and vevent.location.value else ""
+        
+        lines.append(f"{i}. {summary}: {dtstart_str} to {dtend_str}{location_str}")
+
+    return f"Events between {start} and {end}:\n" + "\n".join(lines)
 
 
 @tool(
@@ -39,6 +78,30 @@ async def list_events(start: str, end: str) -> str:
     },
 )
 async def create_event(title: str, start: str, end: str, location: str | None = None) -> str:
-    # TODO(Phase 5): create a VEVENT via CalDAV.
+    try:
+        start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    except ValueError:
+        return f"Error: Invalid date format: start='{start}', end='{end}'"
+
+    calendar = _get_calendar()
+    
+    # Construct iCalendar event
+    ical = iCalendar()
+    ical.add("prodid", "-//Nova Household Assistant//")
+    ical.add("version", "2.0")
+    
+    event = iEvent()
+    event.add("summary", title)
+    event.add("dtstart", start_dt)
+    event.add("dtend", end_dt)
+    if location:
+        event.add("location", location)
+    
+    ical.add_component(event)
+    
+    # Save to calendar
+    calendar.save_event(ical.to_ical().decode("utf-8"))
+    
     where = f" @ {location}" if location else ""
-    return f"[stub] Created event '{title}' {start}–{end}{where}."
+    return f"Created event '{title}' {start}–{end}{where}."

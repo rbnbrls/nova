@@ -98,6 +98,14 @@ services:
       timeout: 5s
       retries: 3
 
+  radicale:
+    image: radicale/radicale:latest
+    ports:
+      - "5232:5232"
+    volumes:
+      - ./data/radicale:/data
+    restart: unless-stopped
+
   caddy:
     image: caddy:2
     depends_on:
@@ -109,3 +117,4 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data
     restart: unless-stopped
+
