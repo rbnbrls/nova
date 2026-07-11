@@ -14,7 +14,7 @@ transforms:
     type: remap
     inputs: [docker]
     source: |
-      .service = .label."com.docker.compose.service" ?? .container_name
+      .service = .label."com.docker.compose.service" || .container_name
       .host = get_hostname() ?? "nova-ai-vm"
 
 sinks:
