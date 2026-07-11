@@ -99,7 +99,7 @@ services:
       retries: 3
 
   radicale:
-    image: radicale/radicale:latest
+    image: tomsquest/docker-radicale:latest
     ports:
       - "5232:5232"
     volumes:
