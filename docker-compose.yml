@@ -80,6 +80,11 @@ services:
   vector:
     image: timberio/vector:latest-alpine
     env_file: .env
+    # OpenObserve's public hostname resolves to the WAN IP, which hairpins into
+    # the router from inside the LAN. Pin it to the Coolify host's LAN IP so
+    # Traefik receives the right SNI/Host and routes to OpenObserve.
+    extra_hosts:
+      - "${OPENOBSERVE_HOST:-openobserve.invalid}:${OPENOBSERVE_LAN_IP:-127.0.0.1}"
     volumes:
       - ./infra/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
