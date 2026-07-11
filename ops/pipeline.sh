@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# The closed loop: deploy → observe → (heal → redeploy → observe)* with a cap.
+# The closed loop: deploy → observe → (triage/heal → redeploy)* with a cap.
 #
-# Intended to run on the Nova AI VM (or any host with docker + the repo +
-# claude CLI authenticated). Trigger it from Coolify's post-deployment webhook,
-# a systemd timer, or manually after a push.
+# observe.sh files failures as Forgejo issues; triage.sh consumes every open
+# `auto-heal` issue (including ones from OpenObserve alerts and users) and
+# runs the Claude Code heal. Fully autonomous only when HEAL_AUTO_PUSH and
+# HEAL_PUSH_TO_MAIN are both true.
 #
 # Usage: ops/pipeline.sh
 
@@ -11,40 +12,38 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 OBSERVE="$OPS_DIR/observe.sh"
 DEPLOY="$OPS_DIR/deploy.sh"
-HEAL="$OPS_DIR/heal.sh"
+TRIAGE="$OPS_DIR/triage.sh"
 
 attempt=0
 "$DEPLOY"
 
 while true; do
-  if incident_out="$("$OBSERVE")"; then
+  if observe_out="$("$OBSERVE")"; then
     log "pipeline: deployment healthy ✔"
     exit 0
   fi
-  incident="$(echo "$incident_out" | tail -1)"
-  log "pipeline: deployment unhealthy — incident: $incident"
+  issue="$(echo "$observe_out" | tail -1)"
+  log "pipeline: deployment unhealthy — issue #$issue ($FORGEJO_URL/$FORGEJO_REPO/issues/$issue)"
 
   if [[ "${HEAL_ENABLED,,}" != "true" ]]; then
-    die "healing disabled; manual intervention required (see $incident)"
+    die "healing disabled; manual intervention required (issue #$issue)"
   fi
   attempt=$(( attempt + 1 ))
   if (( attempt > HEAL_MAX_ATTEMPTS )); then
-    die "heal attempts exhausted ($HEAL_MAX_ATTEMPTS); manual intervention required (see $incident)"
+    die "heal attempts exhausted ($HEAL_MAX_ATTEMPTS); manual intervention required (issue #$issue)"
   fi
 
-  log "pipeline: heal attempt $attempt/$HEAL_MAX_ATTEMPTS"
-  if ! "$HEAL" "$incident"; then
-    die "heal did not produce a deployable fix; manual intervention required (see $incident)"
+  log "pipeline: triage attempt $attempt/$HEAL_MAX_ATTEMPTS"
+  if ! "$TRIAGE"; then
+    die "triage produced no deployable fix; manual intervention required (issue #$issue)"
   fi
 
-  # With HEAL_AUTO_PUSH+HEAL_PUSH_TO_MAIN, the push already re-triggered
-  # Coolify; give it a moment, then re-deploy explicitly to be sure and
-  # loop back to observation.
   if [[ "${HEAL_AUTO_PUSH,,}" == "true" && "${HEAL_PUSH_TO_MAIN,,}" == "true" ]]; then
+    # Push to main already re-triggered Coolify; redeploy explicitly and re-observe.
     sleep 20
     "$DEPLOY"
   else
-    log "pipeline: fix awaits review — loop pauses here until the fix branch is merged"
+    log "pipeline: fix awaits review on the issue — loop pauses until merged"
     exit 3
   fi
 done

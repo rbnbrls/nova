@@ -1,78 +1,113 @@
-# Nova Ops — Closed-Loop CI/CD
+# Nova Ops — Closed-Loop Incident Management & CI/CD
 
-Infra-as-code deployment with an observe → log → self-heal feedback cycle around
-Coolify, using **Claude Code headless** as the on-call engineer.
+One incident queue, two producers, one automated consumer:
 
 ```
-              ┌────────────────────────────────────────────────┐
-              │                                                │
- git push ──► Coolify build+deploy ──► observe.sh              │
-              (webhook / deploy.sh)    health + container +    │
-                       ▲               log checks              │
-                       │                    │ failure          │
-                       │                    ▼                  │
-                heal branch push ◄── heal.sh ◄── incident-*.md │
-                (or auto-merge)      claude -p    structured   │
-                                     diagnose+fix  issue log   │
-              └────────────────────────────────────────────────┘
+                       Docker stack (compose)
+                          │ logs + metrics
+                          ▼
+                       Vector ──► OpenObserve  (Coolify service)
+                                      │ alert webhook (X-Bridge-Token)
+                                      ▼
+ Ruben / Méral ──file issue──►  ops-bridge (dedup by fingerprint)
+        │                             │ create / comment
+        ▼                             ▼
+   ┌──────────────────────────────────────────────────┐
+   │  Forgejo issues — git.7rb.nl/ruben/nova/issues   │   ◄── observe.sh
+   │  (single source of truth for incidents)          │       (deploy failures)
+   └──────────────────────┬───────────────────────────┘
+                          │ open + `auto-heal` label
+                          ▼
+                triage.sh (systemd timer)
+                          │
+                heal.sh — claude -p (headless, tool-allowlisted)
+                          │
+        fix branch ──► comment + `fix-ready` ──► merge ──► Coolify redeploys
+        (or auto-merge to main when fully autonomous)  ──► observe verifies ✔
 ```
+
+## Label protocol
+
+| Label | Meaning |
+|---|---|
+| `incident` / `monitoring` / `user` | Provenance. Bridge + observe set `incident,monitoring`; humans use `user`. |
+| `auto-heal` | **The gate.** Only issues with this label are picked up by triage. Alert/deploy issues get it automatically; add it manually to user issues you trust Claude with. |
+| `healing` | Lock while a heal run is in progress. |
+| `fix-ready` | A committed fix exists (branch named in the issue comment) awaiting review/merge. |
+| `heal-failed` | Heal ran, no deployable fix; diagnosis commented, `auto-heal` removed — a human takes over. |
+
+Create them once: `ops/issue.sh setup-labels`.
 
 ## Components
 
-| Script | Role |
+| Piece | Role |
 |---|---|
-| `deploy.sh` | Infra as code: triggers Coolify deployments via its API and waits for completion. The *stack definition* itself is `docker-compose.yml` + Coolify resource config. |
-| `observe.sh` | Post-deploy verification: polls health endpoints, inspects container state, and on failure writes a structured **incident report** to `ops/incidents/` (the "log issues" step). |
-| `heal.sh` | Feeds the incident to `claude -p` (headless Claude Code) with a constrained tool allowlist. Claude diagnoses from logs + code, applies the smallest fix, verifies, and commits on a `nova/heal-<ts>` branch. Non-repo causes get a written diagnosis instead of a code change. |
-| `pipeline.sh` | Orchestrates the loop: deploy → observe → heal → redeploy, capped by `HEAL_MAX_ATTEMPTS`. |
-| `incidents/` | Audit trail: every incident report, Claude diagnosis, and heal-run JSON transcript. (Gitignored except `.gitkeep`.) |
+| `infra/vector/vector.yaml` + `vector` service | Ships all container logs + host metrics into OpenObserve. |
+| OpenObserve (Coolify service) | Dashboards, log search, **alerts**. Each alert gets a webhook destination pointing at ops-bridge. |
+| `services/ops-bridge/` | FastAPI webhook receiver: authenticates (`X-Bridge-Token`), fingerprints the alert, dedups against open issues, creates/comments Forgejo issues with `incident,monitoring,auto-heal`. |
+| `issue.sh` | Forgejo API CLI: `create`, `comment`, `close`, `label`, `body`, `list-autoheal`, `setup-labels`. |
+| `deploy.sh` | Triggers Coolify deployments via API and waits for completion. |
+| `observe.sh` | Post-deploy verification; failures become Forgejo issues (health results, container state, log tails, recent commits). |
+| `triage.sh` | The consumer: polls open `auto-heal` issues, locks with `healing`, runs `heal.sh`, comments the outcome + heal log on the issue, applies `fix-ready`/`heal-failed`. |
+| `heal.sh` | Claude Code headless (`claude -p`, `--permission-mode acceptEdits`, strict `--allowedTools`, `--max-turns`). Smallest fix, verified, committed on `nova/heal-<ts>`. Non-repo causes → written diagnosis, no code change. |
+| `pipeline.sh` | Deploy → observe → triage loop for push-triggered runs, capped by `HEAL_MAX_ATTEMPTS`. |
+| `incidents/` | Local artifacts only: claude JSON transcripts + diagnosis files. Issues are the record. |
 
 ## Setup
 
-1. On the Nova AI VM (needs: repo checkout, `docker`, `jq`, `curl`, `git`, and
-   an authenticated `claude` CLI):
+1. **Forgejo**: create an API token (issue read/write) → `FORGEJO_TOKEN` in both
+   `.env` (for ops-bridge) and `ops/config.env` (for the scripts). Then:
    ```bash
-   cp ops/config.env.example ops/config.env   # fill in Coolify token + UUIDs
-   chmod +x ops/*.sh
+   cp ops/config.env.example ops/config.env    # fill in Coolify + Forgejo
+   ops/issue.sh setup-labels
    ```
-2. Wire the loop to deployments — either:
-   - **Coolify webhook**: point the post-deployment webhook at a tiny endpoint
-     that runs `ops/pipeline.sh`, or
-   - **systemd timer** (simplest), running the loop a few minutes after pushes:
+2. **OpenObserve** (Coolify service): note URL/org/user/password into `.env`
+   (`OPENOBSERVE_*`) — Vector starts shipping on next deploy. For each alert,
+   add a webhook destination:
+   - URL: `http://<nova-vm>:8085/webhooks/openobserve`
+   - Header: `X-Bridge-Token: <BRIDGE_TOKEN from .env>`
+   - Body: OpenObserve's default alert JSON is fine (bridge reads `alert_name`/`stream_name`).
+   - Set a silence period (e.g. 30 min) per alert; the bridge also dedups by fingerprint.
+3. **Triage timer** on the ops host (repo checkout + docker + jq + curl + git +
+   authenticated `claude` CLI):
 
    ```ini
-   # /etc/systemd/system/nova-ops-loop.service
+   # /etc/systemd/system/nova-triage.service
    [Service]
    Type=oneshot
    WorkingDirectory=/opt/nova
-   ExecStart=/opt/nova/ops/pipeline.sh
+   ExecStart=/opt/nova/ops/triage.sh
    User=nova
 
-   # /etc/systemd/system/nova-ops-loop.timer
+   # /etc/systemd/system/nova-triage.timer
    [Timer]
-   OnCalendar=*:0/15        # every 15 min; observe is cheap when healthy
+   OnCalendar=*:0/5          # poll the issue queue every 5 minutes
    [Install]
    WantedBy=timers.target
    ```
 
-## Autonomy levels
+## User workflow
 
-Controlled in `config.env` — start supervised, earn autonomy:
+File an issue at https://git.7rb.nl/ruben/nova/issues describing the problem
+(label it `user`). If you want Claude to attempt it autonomously, add the
+`auto-heal` label — the next triage tick picks it up, works it, and reports
+back as a comment on your issue. Everything Claude did is auditable there.
+
+## Autonomy levels
 
 | Level | Settings | Behavior |
 |---|---|---|
-| **Supervised** (default) | `HEAL_AUTO_PUSH=false` | Fix committed locally on a heal branch; you review + push. |
-| **Review-gated** | `HEAL_AUTO_PUSH=true` | Fix branch pushed for review; merging deploys it. |
-| **Autonomous** | + `HEAL_PUSH_TO_MAIN=true` | Fix merged + pushed to `main` → Coolify redeploys → loop re-observes. Capped by `HEAL_MAX_ATTEMPTS`. |
+| **Supervised** (default) | `HEAL_AUTO_PUSH=false` | Fix committed locally on a heal branch; issue gets `fix-ready` + instructions. |
+| **Review-gated** | `HEAL_AUTO_PUSH=true` | Fix branch pushed; merge on Forgejo to deploy. |
+| **Autonomous** | + `HEAL_PUSH_TO_MAIN=true` | Fix merged + pushed → Coolify redeploys → observe verifies → issue closed. Capped by `HEAL_MAX_ATTEMPTS`. |
 
 ## Guardrails on the healing agent
 
-- `--permission-mode acceptEdits` with an explicit `--allowedTools` allowlist:
-  read/search tools, file edits, and only scoped Bash (`git status/diff/log/add/commit`,
-  `python3`, `docker logs/ps`, `docker compose config`). No pushes, no container
-  restarts, no arbitrary shell.
-- `--max-turns` caps runaway sessions; every run's JSON transcript is kept in
-  `ops/incidents/heal-<ts>.json`.
-- Refuses to run on a dirty working tree; failed runs clean up their branch.
-- Non-code root causes (missing Coolify secret, host issue) produce a
-  `*-diagnosis.md` file instead of a code change — the loop stops and asks a human.
+- `--permission-mode acceptEdits` + explicit `--allowedTools`: read/search, file
+  edits, and only scoped Bash (`git status/diff/log/add/commit`, `python3`,
+  `docker logs/ps`, `docker compose config`). No pushes, no restarts, no arbitrary shell.
+- `--max-turns` caps runaway sessions; JSON transcripts kept in `ops/incidents/`.
+- Refuses to run on a dirty working tree; failed runs delete their branch.
+- `healing` label prevents double-processing; failed issues lose `auto-heal` so
+  the timer never retries them unattended.
+- Every action is a comment on the issue — full audit trail in Forgejo.

@@ -76,6 +76,28 @@ services:
       - ./data/piper:/data
     restart: unless-stopped
 
+  # --- Observability: ship logs + host metrics to OpenObserve (Coolify service) ---
+  vector:
+    image: timberio/vector:latest-alpine
+    env_file: .env
+    volumes:
+      - ./infra/vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  # --- OpenObserve alert → Forgejo issue bridge (closed-loop incident intake) ---
+  ops-bridge:
+    build: ./services/ops-bridge
+    env_file: .env
+    ports:
+      - "8085:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   caddy:
     image: caddy:2
     depends_on:

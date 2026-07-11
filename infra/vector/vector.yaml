@@ -1,0 +1,46 @@
+# Vector: ship Docker container logs + host metrics into OpenObserve.
+# OpenObserve runs as a separate Coolify service; endpoint/creds come from .env.
+
+sources:
+  docker:
+    type: docker_logs
+
+  host:
+    type: host_metrics
+    scrape_interval_secs: 30
+
+transforms:
+  docker_enriched:
+    type: remap
+    inputs: [docker]
+    source: |
+      .service = .label."com.docker.compose.service" ?? .container_name
+      .host = get_hostname() ?? "nova-ai-vm"
+
+sinks:
+  openobserve_logs:
+    type: http
+    inputs: [docker_enriched]
+    uri: "${OPENOBSERVE_URL}/api/${OPENOBSERVE_ORG}/docker/_json"
+    method: post
+    auth:
+      strategy: basic
+      user: "${OPENOBSERVE_USER}"
+      password: "${OPENOBSERVE_PASSWORD}"
+    compression: gzip
+    encoding:
+      codec: json
+      timestamp_format: rfc3339
+    healthcheck:
+      enabled: false
+
+  openobserve_metrics:
+    type: prometheus_remote_write
+    inputs: [host]
+    endpoint: "${OPENOBSERVE_URL}/api/${OPENOBSERVE_ORG}/prometheus/api/v1/write"
+    auth:
+      strategy: basic
+      user: "${OPENOBSERVE_USER}"
+      password: "${OPENOBSERVE_PASSWORD}"
+    healthcheck:
+      enabled: false

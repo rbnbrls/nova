@@ -37,7 +37,7 @@ Your job, in order:
 2. Fix it with the smallest change that resolves the failure. Do not refactor.
 3. If the cause is NOT fixable from this repo (e.g. host misconfiguration, \
 missing secret in Coolify, external service down), do NOT change code — instead \
-write your diagnosis to the file ${INCIDENT_FILE%.md}-diagnosis.md and stop.
+write your diagnosis to the file $INCIDENT_DIR/diagnosis-$TS.md and stop.
 4. If you changed code: verify it (python -m compileall for Python, config \
 syntax checks where possible) and commit with message \
 'fix(heal): <summary>' plus a body explaining root cause. Commit on the \
@@ -69,7 +69,7 @@ log "heal: result → $(jq -r '.result // "no result field"' "$RESULT_JSON" | he
 
 # Did Claude actually commit a fix?
 if [[ -z "$(git log "$BASE_BRANCH..$HEAL_BRANCH" --oneline)" ]]; then
-  log "heal: no fix committed (likely diagnosed as not repo-fixable) — see ${INCIDENT_FILE%.md}-diagnosis.md"
+  log "heal: no fix committed (likely diagnosed as not repo-fixable) — see $INCIDENT_DIR/diagnosis-$TS.md"
   cleanup_on_fail
   exit 2
 fi
@@ -93,3 +93,6 @@ else
   log "heal: fix ready on $HEAL_BRANCH — review with: git diff $BASE_BRANCH..$HEAL_BRANCH"
   log "heal: push to deploy: git push -u origin $HEAL_BRANCH (or merge to $BASE_BRANCH)"
 fi
+
+# Machine-readable output for triage.sh/pipeline.sh: branch name as last line.
+echo "$HEAL_BRANCH"
