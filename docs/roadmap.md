@@ -25,6 +25,13 @@ Install Coolify on the Nova AI VM. Connect the Nova git repo; each service is a 
 resource with secrets managed in Coolify. Push-to-deploy on `main`, health checks, rollbacks.
 GPU containers run with `--gpus` passthrough. **Verify:** a commit auto-redeploys; rollback works.
 
+**Closed-loop SDLC (`ops/`):** deployments are code-triggered and self-observing —
+`deploy.sh` drives Coolify via API, `observe.sh` verifies health and writes structured
+incident reports on failure, and `heal.sh` feeds incidents to **Claude Code headless**
+(`claude -p`, constrained tool allowlist) to diagnose and commit fixes on a heal branch;
+`pipeline.sh` closes the loop (deploy → observe → heal → redeploy, attempt-capped).
+Autonomy is opt-in per level: supervised → review-gated → fully autonomous. See `ops/README.md`.
+
 ### Phase 2 — Local AI runtime
 Ollama serving a ~14B tool-calling model (Qwen3-14B candidate). Postgres + pgvector. Deployed via
 Coolify. **Verify:** Ollama returns a tool-call; model + Whisper coexist in VRAM.

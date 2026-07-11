@@ -32,6 +32,7 @@ docker-compose.yml         Full stack (nova-core, postgres, ollama, whisper, pip
 Caddyfile                  Reverse proxy (LAN dashboard/API + WhatsApp webhook)
 .env.example               Config template — real secrets live in Coolify, never in git
 infra/postgres/init/       DB schema (tasks + memory), runs on first Postgres boot
+ops/                       Closed-loop CI/CD: deploy→observe→heal (Claude Code headless)
 services/nova-core/        The FastAPI brain
   app/
     main.py                FastAPI app: /health, /v1/chat/completions, /dashboard/*
@@ -79,3 +80,8 @@ function specs.
 
 Deploys are git-driven via **Coolify** on the Nova AI VM (Phase 1). Push to `main` →
 Coolify rebuilds and redeploys each service. Secrets are managed in Coolify, not in git.
+
+**Closed feedback loop:** [ops/](./ops/) verifies every deployment (`observe.sh`), logs
+failures as structured incidents, and can self-heal via Claude Code headless (`heal.sh`) —
+diagnosing from logs + code and committing fixes on a review branch, or fully autonomously
+if enabled. See [ops/README.md](./ops/README.md).
