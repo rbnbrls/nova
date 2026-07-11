@@ -44,13 +44,13 @@ async def health() -> dict:
 
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
-async def chat_completions(req: ChatCompletionRequest) -> ChatCompletionResponse:
+async def chat_completions(req: ChatCompletionRequest, user: str | None = None) -> ChatCompletionResponse:
     """Run the agent loop for the latest user message and return the reply."""
-    user = req.user or "household"
+    resolved_user = user or req.user or "household"
     history = [m.model_dump() for m in req.messages[:-1]]
     last = req.messages[-1].content if req.messages else ""
 
-    reply = await run_agent(last, user=user, history=history)
+    reply = await run_agent(last, user=resolved_user, history=history)
 
     return ChatCompletionResponse(
         model=req.model or settings.nova_model,

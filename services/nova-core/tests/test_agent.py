@@ -63,3 +63,42 @@ async def test_run_agent_with_tool_call():
 
     finally:
         TOOLS.pop("test_agent_tool", None)
+
+
+def test_chat_completions_user_query_parameter():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from unittest.mock import AsyncMock, patch
+
+    client = TestClient(app)
+    
+    # Mock run_agent to capture user
+    with patch("app.main.run_agent", new_callable=AsyncMock) as mock_run:
+        mock_run.return_value = "Mocked reply"
+        
+        # 1. Query parameter specified
+        resp = client.post(
+            "/v1/chat/completions?user=Meral",
+            json={"messages": [{"role": "user", "content": "Hello"}], "user": "Ruben"}
+        )
+        assert resp.status_code == 200
+        mock_run.assert_called_once_with("Hello", user="Meral", history=[])
+        mock_run.reset_mock()
+        
+        # 2. Body user specified, no query parameter
+        resp = client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "Hello"}], "user": "Ruben"}
+        )
+        assert resp.status_code == 200
+        mock_run.assert_called_once_with("Hello", user="Ruben", history=[])
+        mock_run.reset_mock()
+        
+        # 3. No user specified
+        resp = client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "Hello"}]}
+        )
+        assert resp.status_code == 200
+        mock_run.assert_called_once_with("Hello", user="household", history=[])
+
