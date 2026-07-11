@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Household identity: "number:name,number:name"
     nova_whatsapp_users: str = ""
     whatsapp_app_secret: str = ""
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_verify_token: str = ""
+
 
 
     @property

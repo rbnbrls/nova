@@ -11,12 +11,18 @@ Channel webhooks (WhatsApp, Phase 4) will be added under /webhooks/*.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Query, BackgroundTasks, Response, HTTPException
 
 from . import llm, db
 from .agent import run_agent
 from .config import settings
 from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice
+from .security import verify_whatsapp_signature
+
+
+from .whatsapp import process_incoming_whatsapp
+
+
 
 
 @asynccontextmanager
@@ -65,3 +71,33 @@ async def dashboard_tasks() -> dict:
 async def dashboard_events() -> dict:
     # TODO(Phase 5/8): fetch upcoming CalDAV events.
     return {"events": []}
+
+
+@app.get("/webhooks/whatsapp")
+async def whatsapp_handshake(
+    mode: str = Query(..., alias="hub.mode"),
+    token: str = Query(..., alias="hub.verify_token"),
+    challenge: str = Query(..., alias="hub.challenge"),
+):
+    if mode == "subscribe" and token == settings.whatsapp_verify_token:
+        return Response(content=challenge, media_type="text/plain")
+    raise HTTPException(status_code=403, detail="Verification failed")
+
+
+@app.post("/webhooks/whatsapp")
+async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
+    body = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256")
+    
+    if not verify_whatsapp_signature(body, signature, settings.whatsapp_app_secret):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+        
+    try:
+        import json
+        payload = json.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        
+    background_tasks.add_task(process_incoming_whatsapp, payload)
+    return {"status": "accepted"}
+
