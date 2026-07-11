@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # Household identity: "number:name,number:name"
     nova_whatsapp_users: str = ""
+    whatsapp_app_secret: str = ""
 
     @property
     def database_url(self) -> str:

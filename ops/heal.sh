@@ -77,6 +77,14 @@ fi
 log "heal: fix committed on $HEAL_BRANCH:"
 git log "$BASE_BRANCH..$HEAL_BRANCH" --oneline
 
+log "heal: running test suite to verify fix..."
+if ! "$REPO_DIR/ops/run-tests.sh"; then
+  log "heal: test suite failed on heal branch — rejecting fix"
+  cleanup_on_fail
+  exit 3
+fi
+log "heal: all tests passed — fix verified!"
+
 if [[ "${HEAL_AUTO_PUSH,,}" == "true" ]]; then
   if [[ "${HEAL_PUSH_TO_MAIN,,}" == "true" ]]; then
     log "heal: auto-merging into $BASE_BRANCH and pushing (fully autonomous mode)"
