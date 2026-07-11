@@ -1,0 +1,26 @@
+# Reverse proxy for the Nova stack.
+# - The WhatsApp webhook is the only route exposed publicly (via Cloudflare Tunnel → Phase 4).
+# - The dashboard (Phase 8) and API are LAN-only.
+
+# LAN entry point (replace with your local hostname/IP).
+nova.local {
+	# Static household dashboard (Phase 8)
+	handle_path /dashboard/* {
+		root * /srv/dashboard
+		file_server
+	}
+
+	# Nova Core API (chat endpoint used by Home Assistant + dashboard data)
+	handle {
+		reverse_proxy nova-core:8080
+	}
+}
+
+# The WhatsApp webhook is proxied here and published externally via Cloudflare Tunnel,
+# which points at caddy:80. Only this path should be tunneled.
+# :80 {
+# 	handle /webhooks/whatsapp* {
+# 		reverse_proxy nova-core:8080
+# 	}
+# 	respond 404
+# }

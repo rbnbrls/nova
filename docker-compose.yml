@@ -1,0 +1,89 @@
+# Nova stack — deployed on the "Nova AI" VM, orchestrated by Coolify (Phase 1).
+# GPU containers (ollama, whisper) use the NVIDIA Container Toolkit.
+# For local dev without Coolify: `docker compose up -d`.
+
+services:
+  nova-core:
+    build: ./services/nova-core
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ./data/ollama:/root/.ollama
+    restart: unless-stopped
+    # GPU passthrough (requires NVIDIA Container Toolkit on the host)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # --- Voice I/O (Phase 6). Wired into Home Assistant's Assist pipeline via Wyoming. ---
+  whisper:
+    image: rhasspy/wyoming-whisper:latest
+    command: --model small --language nl --uri tcp://0.0.0.0:10300
+    ports:
+      - "10300:10300"
+    volumes:
+      - ./data/whisper:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  piper:
+    image: rhasspy/wyoming-piper:latest
+    command: --voice nl_NL-mls-medium --uri tcp://0.0.0.0:10200
+    ports:
+      - "10200:10200"
+    volumes:
+      - ./data/piper:/data
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - nova-core
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+    restart: unless-stopped
