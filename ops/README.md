@@ -1,5 +1,9 @@
 # Nova Ops — Closed-Loop Incident Management & CI/CD
 
+> **Provisioning the infra itself (Phase 0/1, Proxmox + Coolify)?** See
+> [`ops/provision/`](./provision/) — starts with a read-only host audit before
+> anything is created or changed.
+
 One incident queue, two producers, one automated consumer:
 
 ```

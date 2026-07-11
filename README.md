@@ -59,6 +59,11 @@ services/nova-core/        The FastAPI brain
 | 7 | Proactive: briefings, reminders, better TTS | pending |
 | 8 | Static LAN dashboard (calendar + tasks) | endpoints stubbed |
 
+Beyond Phase 8, the roadmap lists two extension tracks — hardening the agentic SDLC
+(tests, agent evals, tracing, feedback→incident loop) and per-person user features
+(speaker ID, private memory scopes, coordination, proactive polish). See
+[docs/roadmap.md — Roadmap extensions](./docs/roadmap.md#roadmap-extensions-beyond-phase-8).
+
 ## Local development
 
 ```bash

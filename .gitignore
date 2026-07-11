@@ -3,6 +3,12 @@
 *.env
 !.env.example
 !ops/config.env.example
+!ops/secrets/infra.env.example
+
+# Provisioning credentials (Proxmox/Coolify admin tokens, SSH keys) — never commit
+ops/secrets/*
+!ops/secrets/.gitkeep
+!ops/secrets/infra.env.example
 
 # Ops loop artifacts (incident reports, heal transcripts)
 ops/incidents/*
