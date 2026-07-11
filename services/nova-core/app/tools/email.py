@@ -34,7 +34,7 @@ async def _get_access_token() -> str | None:
     return None
 
 
-async def _classify_importance(subject: str, sender: str, preview: str) -> bool:
+async def classify_importance(subject: str, sender: str, preview: str) -> bool:
     # 1. Rules-based pass (check keywords in subject or body preview)
     combined_text = f"{subject} {preview}".lower()
     for kw in IMPORTANT_KEYWORDS:
@@ -58,6 +58,48 @@ async def _classify_importance(subject: str, sender: str, preview: str) -> bool:
         return True
 
 
+async def fetch_emails_from_graph(limit: int = 10, unread_only: bool = False) -> list[dict]:
+    token = await _get_access_token()
+    
+    # Mock data fallback for development if credentials are not configured
+    if not token or not settings.azure_mailbox_email:
+        return [
+            {"id": "msg_1", "subject": "School update: upcoming holidays", "from": "school@edu.nl", "preview": "Dear parents, please note that summer holidays start next week.", "unread": True},
+            {"id": "msg_2", "subject": "Radiale CalDAV Server Update", "from": "admin@local.lan", "preview": "The local radicale container has updated successfully.", "unread": False},
+            {"id": "msg_3", "subject": "Factuur July 2026", "from": "billing@energy.nl", "preview": "Your monthly energy invoice is ready for download.", "unread": True},
+            {"id": "msg_4", "subject": "Spam Offer: Cheap vacations", "from": "spam@deals.com", "preview": "Click here to win a free trip to Hawaii!", "unread": True}
+        ]
+        
+    url = f"https://graph.microsoft.com/v1.0/users/{settings.azure_mailbox_email}/messages"
+    headers = {"Authorization": f"Bearer {token}"}
+    params = {
+        "$top": limit,
+        "$select": "id,subject,from,bodyPreview,isRead,receivedDateTime",
+        "$orderby": "receivedDateTime desc"
+    }
+    if unread_only:
+        params["$filter"] = "isRead eq false"
+        
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=headers, params=params)
+        if resp.status_code != 200:
+            print(f"[ERROR] Failed to fetch emails: {resp.text}")
+            return []
+        
+        raw_emails = resp.json().get("value", [])
+        emails = []
+        for item in raw_emails:
+            sender_info = item.get("from", {}).get("emailAddress", {})
+            emails.append({
+                "id": item.get("id"),
+                "subject": item.get("subject", "No Subject"),
+                "from": f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>",
+                "preview": item.get("bodyPreview", ""),
+                "unread": not item.get("isRead", True)
+            })
+        return emails
+
+
 @tool(
     name="list_recent_emails",
     description="List recent emails from the shared Outlook mailbox, newest first.",
@@ -70,50 +112,17 @@ async def _classify_importance(subject: str, sender: str, preview: str) -> bool:
     },
 )
 async def list_recent_emails(limit: int = 10, unread_only: bool = False) -> str:
-    token = await _get_access_token()
-    
-    # Mock data fallback for development if credentials are not configured
-    if not token or not settings.azure_mailbox_email:
-        emails = [
-            {"subject": "School update: upcoming holidays", "from": "school@edu.nl", "preview": "Dear parents, please note that summer holidays start next week.", "unread": True},
-            {"subject": "Radiale CalDAV Server Update", "from": "admin@local.lan", "preview": "The local radicale container has updated successfully.", "unread": False},
-            {"subject": "Factuur July 2026", "from": "billing@energy.nl", "preview": "Your monthly energy invoice is ready for download.", "unread": True},
-            {"subject": "Spam Offer: Cheap vacations", "from": "spam@deals.com", "preview": "Click here to win a free trip to Hawaii!", "unread": True}
-        ]
-    else:
-        url = f"https://graph.microsoft.com/v1.0/users/{settings.azure_mailbox_email}/messages"
-        headers = {"Authorization": f"Bearer {token}"}
-        params = {
-            "$top": limit,
-            "$select": "subject,from,bodyPreview,isRead,receivedDateTime",
-            "$orderby": "receivedDateTime desc"
-        }
-        if unread_only:
-            params["$filter"] = "isRead eq false"
-            
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, headers=headers, params=params)
-            if resp.status_code != 200:
-                return f"Error connecting to MS Graph API: {resp.text}"
-            
-            raw_emails = resp.json().get("value", [])
-            emails = []
-            for item in raw_emails:
-                sender_info = item.get("from", {}).get("emailAddress", {})
-                emails.append({
-                    "subject": item.get("subject", "No Subject"),
-                    "from": f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>",
-                    "preview": item.get("bodyPreview", ""),
-                    "unread": not item.get("isRead", True)
-                })
-
+    emails = await fetch_emails_from_graph(limit=limit, unread_only=unread_only)
+    if not emails:
+        return "No recent emails."
+        
     lines = []
     for i, mail in enumerate(emails, 1):
         subject = mail["subject"]
         sender = mail["from"]
         preview = mail["preview"]
         
-        is_important = await _classify_importance(subject, sender, preview)
+        is_important = await classify_importance(subject, sender, preview)
         importance_tag = " [IMPORTANT]" if is_important else ""
         unread_tag = " (Unread)" if mail["unread"] else ""
         

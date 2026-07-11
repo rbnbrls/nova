@@ -25,12 +25,27 @@ from .whatsapp import process_incoming_whatsapp
 
 
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks
+
+scheduler = AsyncIOScheduler()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize the database pool
+    # Initialize the database pool and run migrations
     await db.get_pool()
+    await db.run_migrations()
+    
+    # Register background jobs
+    scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails")
+    scheduler.add_job(send_morning_briefing, "cron", hour=7, minute=0, id="send_morning_briefing")
+    scheduler.add_job(check_overdue_tasks, "interval", hours=1, id="check_overdue_tasks")
+    scheduler.start()
+    
     yield
-    # Close the database pool
+    # Shutdown scheduler and close database pool
+    scheduler.shutdown()
     await db.close_pool()
 
 
