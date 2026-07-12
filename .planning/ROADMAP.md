@@ -84,7 +84,7 @@ Plans:
 
 Plans:
 
-- [ ] 03-01-PLAN.md — Alembic setup, initial migration from 01_schema.sql, db.py refactor to use Alembic, archive old SQL
+- [x] 03-01-PLAN.md — Alembic setup, initial migration from 01_schema.sql, db.py refactor to use Alembic, archive old SQL
 
 ---
 
@@ -184,7 +184,7 @@ Plans:
 
 **Success Criteria:**
 
-1. Agent loop intercepts `create_event`, `complete_task`, `delete_event`, `send_email` before execution
+1. Agent loop intercepts `create_event`, `complete_task` before execution (extensible — new write tools registered here as they are added)
 2. First request returns `[CONFIRMATION_REQUIRED]` prompt instead of calling the tool
 3. Subsequent turn with affirmative response (yes, confirm, ok, ja, sure, approve, go ahead) proceeds with execution
 4. Non-affirmative or unrecognized responses do not execute the tool

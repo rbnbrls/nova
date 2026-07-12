@@ -348,6 +348,69 @@ async def test_eval_weather_refusal_scenario():
 # EVAL-02: Eval suite discoverability
 # ---------------------------------------------------------------------------
 
+@pytest.mark.asyncio
+async def test_eval_confirmation_proceed_path():
+    """CONFIRM-01: Subsequent affirmative response proceeds with tool execution."""
+    mock_turn = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "type": "function",
+                "id": "call_task",
+                "function": {
+                    "name": "complete_task",
+                    "arguments": '{"title": "buy milk"}'
+                }
+            }
+        ]
+    }
+    history = [
+        {"role": "user", "content": "Mark 'buy milk' task as done"},
+        {"role": "assistant", "content": "[CONFIRMATION_REQUIRED] Would you like me to proceed with complete_task for 'buy milk'?"},
+    ]
+    with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
+        mock_chat.side_effect = [
+            mock_turn,
+            {"role": "assistant", "content": "Done! I've marked 'buy milk' as complete."}
+        ]
+        with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = "Task 'buy milk' completed."
+            resp = await run_agent("yes", user="Ruben", history=history)
+            assert mock_call.called
+            assert "buy milk" in resp.lower() or "done" in resp.lower()
+
+
+@pytest.mark.asyncio
+async def test_eval_confirmation_deny_path():
+    """CONFIRM-01: Non-affirmative response does not execute the tool."""
+    mock_turn = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "type": "function",
+                "id": "call_task",
+                "function": {
+                    "name": "complete_task",
+                    "arguments": '{"title": "buy milk"}'
+                }
+            }
+        ]
+    }
+    history = [
+        {"role": "user", "content": "Mark 'buy milk' task as done"},
+        {"role": "assistant", "content": "[CONFIRMATION_REQUIRED] Would you like me to proceed with complete_task for 'buy milk'?"},
+    ]
+    with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
+        mock_chat.return_value = mock_turn
+        with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = "Task 'buy milk' completed."
+            resp = await run_agent("no", user="Ruben", history=history)
+            assert not mock_call.called
+            assert "[CONFIRMATION_REQUIRED]" in resp
+
+
 def test_eval_suite_is_discoverable_by_pytest():
     """EVAL-02: The eval suite contains all required scenario types and is discoverable."""
     # Being collected and executed by pytest proves discovery in CI.
@@ -365,4 +428,6 @@ def test_eval_suite_is_discoverable_by_pytest():
     assert "test_eval_task_with_deadline_scenario" in test_funcs
     assert "test_eval_priority_task_scenario" in test_funcs
     assert "test_eval_weather_refusal_scenario" in test_funcs
-    assert len(test_funcs) >= 11
+    assert "test_eval_confirmation_proceed_path" in test_funcs
+    assert "test_eval_confirmation_deny_path" in test_funcs
+    assert len(test_funcs) >= 13
