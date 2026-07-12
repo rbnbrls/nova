@@ -105,6 +105,49 @@ async def test_llm_chat_no_retry_on_4xx():
         mock_sleep.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_llm_chat_logs_retry_warning():
+    """Retry logging emits a warning with attempt number and delay for each retry."""
+    mock_response_500 = MagicMock(spec=httpx.Response)
+    mock_response_500.status_code = 500
+    mock_response_500.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "500 Internal Server Error",
+        request=MagicMock(),
+        response=mock_response_500
+    )
+
+    mock_response_200 = MagicMock(spec=httpx.Response)
+    mock_response_200.status_code = 200
+    mock_response_200.json.return_value = {"message": {"role": "assistant", "content": "OK!"}}
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.post.side_effect = [
+        mock_response_500,
+        mock_response_500,
+        mock_response_200,
+    ]
+
+    with patch("httpx.AsyncClient", return_value=mock_client), \
+         patch("asyncio.sleep", new_callable=AsyncMock), \
+         patch("app.llm.log.warning") as mock_warning:
+
+        res = await llm.chat([{"role": "user", "content": "hello"}])
+        assert res["content"] == "OK!"
+        assert mock_warning.call_count == 2
+
+        # Each call should include attempt number and delay
+        first_args = mock_warning.call_args_list[0][0]
+        second_args = mock_warning.call_args_list[1][0]
+        # Format string: first arg; second positional arg = attempt + 1, third = max_retries, last = delay
+        assert first_args[1] == 1  # attempt 1/3
+        assert first_args[2] == 3
+        assert first_args[-1] == 1  # delay 1s
+        assert second_args[1] == 2  # attempt 2/3
+        assert second_args[2] == 3
+        assert second_args[-1] == 2  # delay 2s
+
+
 def test_friendly_fallback_on_unhandled_exception():
     client = TestClient(app)
     with patch("app.main.run_agent", side_effect=ValueError("Ollama crashed")):
@@ -122,6 +165,25 @@ async def test_agent_turn_timeout():
     with patch("app.llm.chat", side_effect=TimeoutError()):
         resp = await run_agent("hello", user="Ruben")
         assert resp == "Sorry, I took too long to think about that. Could you try again?"
+
+
+@pytest.mark.asyncio
+async def test_agent_uses_configurable_timeout():
+    """Configurable timeout is honoured: setting a tiny value triggers the
+    friendly fallback instead of the hardcoded 60s budget."""
+    original = settings.nova_max_turn_timeout
+    settings.nova_max_turn_timeout = 0.001
+
+    async def slow_chat(*args, **kwargs):
+        await asyncio.sleep(10)
+        return {"role": "assistant", "content": "too late"}
+
+    try:
+        with patch("app.llm.chat", side_effect=slow_chat):
+            resp = await run_agent("hello", user="Ruben")
+            assert resp == "Sorry, I took too long to think about that. Could you try again?"
+    finally:
+        settings.nova_max_turn_timeout = original
 
 
 @pytest.mark.asyncio
