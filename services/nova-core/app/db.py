@@ -104,5 +104,69 @@ async def run_migrations():
             """
         )
 
+        # --- Multi-channel support (Phase 13) ---
+
+        # Add channel columns to user_preferences
+        await conn.execute(
+            "ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS last_active_channel TEXT NOT NULL DEFAULT 'whatsapp'"
+        )
+        await conn.execute(
+            "ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS channels_enabled TEXT[] NOT NULL DEFAULT '{whatsapp}'"
+        )
+
+        # Create channel_identities table
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS channel_identities (
+                id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                channel    TEXT NOT NULL,
+                channel_id TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS channel_identities_unique_idx ON channel_identities (channel, channel_id)"
+        )
+
+        # Rename whatsapp_verification_codes → channel_verification_codes
+        await conn.execute(
+            "ALTER TABLE IF EXISTS whatsapp_verification_codes RENAME TO channel_verification_codes"
+        )
+
+        # Create channel_verification_codes for fresh installs where the old table never existed
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS channel_verification_codes (
+                id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                whatsapp_number TEXT NOT NULL,
+                code            TEXT NOT NULL,
+                channel         TEXT NOT NULL DEFAULT 'whatsapp',
+                channel_id      TEXT,
+                attempts        INTEGER DEFAULT 0,
+                expires_at      TIMESTAMPTZ NOT NULL,
+                created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+
+        # Idempotent safety net for channel/channel_id columns on channel_verification_codes
+        await conn.execute(
+            "ALTER TABLE channel_verification_codes ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'whatsapp'"
+        )
+        await conn.execute(
+            "ALTER TABLE channel_verification_codes ADD COLUMN IF NOT EXISTS channel_id TEXT"
+        )
+
+        # Add channel column to queued_notifications and make whatsapp_number nullable
+        await conn.execute(
+            "ALTER TABLE queued_notifications ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'whatsapp'"
+        )
+        await conn.execute(
+            "ALTER TABLE queued_notifications ALTER COLUMN whatsapp_number DROP NOT NULL"
+        )
+
 
 
