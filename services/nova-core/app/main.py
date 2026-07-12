@@ -26,13 +26,13 @@ from fastapi.staticfiles import StaticFiles
 from . import llm, db
 from .agent import run_agent
 from .config import settings
-from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest
+from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest
 from .security import verify_whatsapp_signature
 from .whatsapp import process_incoming_whatsapp
 from .tools.calendar import _get_calendar
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, run_briefing_scheduler
+from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, run_briefing_scheduler, process_queued_notifications
 
 log = logging.getLogger("nova-core")
 
@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI):
     # Register background jobs
     scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails")
     scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler")
+    scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications")
     scheduler.add_job(check_overdue_tasks, "interval", hours=1, id="check_overdue_tasks")
     scheduler.start()
     
@@ -388,6 +389,39 @@ async def save_briefing_preferences(req: BriefingSettingsRequest):
             req.weekly_enabled,
             req.weekly_day,
             w_time
+        )
+        
+    return {"status": "success"}
+
+
+@app.post("/api/preferences/dnd")
+async def save_dnd_preferences(req: DNDSettingsRequest):
+    try:
+        from datetime import datetime
+        d_start = datetime.strptime(req.dnd_start, "%H:%M").time()
+        d_end = datetime.strptime(req.dnd_end, "%H:%M").time()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid time format. Must be HH:MM.")
+        
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", req.user)
+        if not user_id:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        await conn.execute(
+            """
+            INSERT INTO user_preferences (user_id, dnd_enabled, dnd_start, dnd_end)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (user_id) DO UPDATE SET
+                dnd_enabled = EXCLUDED.dnd_enabled,
+                dnd_start = EXCLUDED.dnd_start,
+                dnd_end = EXCLUDED.dnd_end
+            """,
+            user_id,
+            req.dnd_enabled,
+            d_start,
+            d_end
         )
         
     return {"status": "success"}

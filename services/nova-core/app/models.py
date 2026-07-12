@@ -56,3 +56,11 @@ class BriefingSettingsRequest(BaseModel):
     weekly_time: str
 
 
+class DNDSettingsRequest(BaseModel):
+    user: str
+    dnd_enabled: bool
+    dnd_start: str
+    dnd_end: str
+
+
+

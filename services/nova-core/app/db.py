@@ -92,4 +92,17 @@ async def run_migrations():
                             number
                         )
 
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS queued_notifications (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                whatsapp_number TEXT NOT NULL,
+                message_text TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+
+
 

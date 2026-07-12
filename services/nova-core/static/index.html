@@ -102,6 +102,28 @@
                                 <button class="btn btn-success" id="btn-save-settings">Save Briefing Settings</button>
                             </div>
                         </div>
+
+                        <div class="settings-form-group">
+                            <h3>Do Not Disturb</h3>
+                            <div class="schedule-row">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="dnd-enabled" />
+                                    <span class="checkmark"></span>
+                                    Enable DND
+                                </label>
+                            </div>
+                            <div class="schedule-row">
+                                <span class="status-label">Silence Start:</span>
+                                <input type="time" id="dnd-start" value="22:00" />
+                            </div>
+                            <div class="schedule-row">
+                                <span class="status-label">Silence End:</span>
+                                <input type="time" id="dnd-end" value="07:00" />
+                            </div>
+                            <div class="input-row">
+                                <button class="btn btn-success" id="btn-save-dnd">Save DND Settings</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="settings-message" id="settings-msg"></div>
                 </div>

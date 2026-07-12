@@ -83,7 +83,7 @@ async def send_morning_briefing_for_user(user_name: str, number: str):
         briefing += "- No new important emails.\n"
         
     # Send via WhatsApp E.164
-    await send_whatsapp_message(number, briefing)
+    await send_whatsapp_message(number, briefing, proactive=True)
 
 
 async def send_weekly_briefing_for_user(user_name: str, number: str):
@@ -158,7 +158,7 @@ async def send_weekly_briefing_for_user(user_name: str, number: str):
         briefing += "- No new important emails.\n"
         
     # Send via WhatsApp E.164
-    await send_whatsapp_message(number, briefing)
+    await send_whatsapp_message(number, briefing, proactive=True)
 
 
 async def send_morning_briefing():
@@ -241,7 +241,7 @@ async def check_overdue_tasks():
         if number:
             due_str = task["due_at"].strftime('%Y-%m-%d %H:%M')
             alert = f"Reminder: Your task '{task['title']}' was due at {due_str}."
-            await send_whatsapp_message(number, alert)
+            await send_whatsapp_message(number, alert, proactive=True)
 
 
 async def check_new_emails():
@@ -282,4 +282,34 @@ async def check_new_emails():
         from . import identity
         users_map = await identity.get_all_whatsapp_users()
         for number in users_map:
-            await send_whatsapp_message(number, alert)
+            await send_whatsapp_message(number, alert, proactive=True)
+
+
+async def process_queued_notifications():
+    """Runs every minute to flush queued notifications for users whose DND window has ended."""
+    from .db import get_pool
+    from .identity import is_user_in_dnd
+    
+    pool = await get_pool()
+    try:
+        async with pool.acquire() as conn:
+            queued = await conn.fetch(
+                """
+                SELECT q.id, q.whatsapp_number, q.message_text, u.name
+                FROM queued_notifications q
+                JOIN users u ON q.user_id = u.id
+                ORDER BY q.created_at ASC
+                """
+            )
+            for row in queued:
+                name = row["name"]
+                number = row["whatsapp_number"]
+                msg_text = row["message_text"]
+                
+                # Check if this user is still in DND
+                in_dnd = await is_user_in_dnd(name)
+                if not in_dnd:
+                    await send_whatsapp_message(number, msg_text, proactive=False)
+                    await conn.execute("DELETE FROM queued_notifications WHERE id = $1", row["id"])
+    except Exception as e:
+        print(f"[ERROR] Error processing queued notifications: {e}")

@@ -468,11 +468,11 @@ body {
 
 .settings-form-sections {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1.2fr 1fr 1fr;
     gap: 2rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1200px) {
     .settings-form-sections {
         grid-template-columns: 1fr;
     }

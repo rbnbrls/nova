@@ -10,15 +10,39 @@ from .db import get_pool
 from .identity import user_from_whatsapp
 
 
-async def send_whatsapp_message(to_number: str, text: str):
+async def send_whatsapp_message(to_number: str, text: str, proactive: bool = False):
     """Send message response back to the user via Meta Cloud API, checking 24h compliance."""
+    user = await user_from_whatsapp(to_number)
+    
+    if proactive and user.name != "household":
+        from .identity import is_user_in_dnd
+        if await is_user_in_dnd(user.name):
+            print(f"[DND ACTIVE] Queuing proactive message for {user.name} ({to_number})")
+            try:
+                pool = await get_pool()
+                async with pool.acquire() as conn:
+                    user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", user.name)
+                    if user_id:
+                        await conn.execute(
+                            """
+                            INSERT INTO queued_notifications (user_id, whatsapp_number, message_text)
+                            VALUES ($1, $2, $3)
+                            """,
+                            user_id,
+                            to_number.lstrip("+"),
+                            text
+                        )
+            except Exception as e:
+                print(f"[ERROR] Failed to queue notification during DND: {e}")
+            return
+
     if not settings.whatsapp_phone_number_id or not settings.whatsapp_access_token:
         # Mock/log during development if config is missing
         print(f"[MOCK WHATSAPP OUTBOUND] To: {to_number}, Body: {text}")
         return
 
     # Check 24-hour compliance window
-    user = await user_from_whatsapp(to_number)
+    is_template = True
     is_template = True
     if user.name != "household":
         try:

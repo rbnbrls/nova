@@ -182,7 +182,10 @@ function updateSettingsUI() {
         morning_time: '07:00',
         weekly_enabled: true,
         weekly_day: 1,
-        weekly_time: '09:00'
+        weekly_time: '09:00',
+        dnd_enabled: false,
+        dnd_start: '22:00',
+        dnd_end: '07:00'
     };
     const linkedVal = document.getElementById('linked-number-val');
     const phoneInput = document.getElementById('phone-input');
@@ -199,12 +202,18 @@ function updateSettingsUI() {
     const weeklyEnabled = document.getElementById('weekly-enabled');
     const weeklyDay = document.getElementById('weekly-day');
     const weeklyTime = document.getElementById('weekly-time');
+    const dndEnabled = document.getElementById('dnd-enabled');
+    const dndStart = document.getElementById('dnd-start');
+    const dndEnd = document.getElementById('dnd-end');
     
     if (morningEnabled) morningEnabled.checked = userPrefs.morning_enabled;
     if (morningTime) morningTime.value = userPrefs.morning_time;
     if (weeklyEnabled) weeklyEnabled.checked = userPrefs.weekly_enabled;
     if (weeklyDay) weeklyDay.value = userPrefs.weekly_day;
     if (weeklyTime) weeklyTime.value = userPrefs.weekly_time;
+    if (dndEnabled) dndEnabled.checked = userPrefs.dnd_enabled;
+    if (dndStart) dndStart.value = userPrefs.dnd_start;
+    if (dndEnd) dndEnd.value = userPrefs.dnd_end;
 }
 
 // User tab switching
@@ -354,6 +363,41 @@ if (btnSaveSettings) {
     });
 }
 
+// Save DND Settings button click
+const btnSaveDnd = document.getElementById('btn-save-dnd');
+if (btnSaveDnd) {
+    btnSaveDnd.addEventListener('click', async () => {
+        clearMsg();
+        
+        const dndEnabled = document.getElementById('dnd-enabled').checked;
+        const dndStart = document.getElementById('dnd-start').value;
+        const dndEnd = document.getElementById('dnd-end').value;
+        
+        try {
+            const resp = await fetch('/api/preferences/dnd', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user: activeSettingsUser,
+                    dnd_enabled: dndEnabled,
+                    dnd_start: dndStart,
+                    dnd_end: dndEnd
+                })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                showMsg('DND settings saved successfully!');
+                fetchPreferences();
+            } else {
+                showMsg(data.detail || 'Failed to save DND settings', true);
+            }
+        } catch (err) {
+            showMsg('Network error saving DND settings', true);
+        }
+    });
+}
+
 // Initial fetch
 fetchPreferences();
+
 
