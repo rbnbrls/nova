@@ -22,6 +22,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./data/backups:/backups:ro
+    networks:
+      - nova-net
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -38,6 +40,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - nova-net
 
   ollama:
     image: ollama/ollama:latest
@@ -52,6 +56,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    networks:
+      - nova-net
 
   # --- Voice I/O (Phase 6). Wired into Home Assistant's Assist pipeline via Wyoming. ---
   whisper:
@@ -69,6 +75,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    networks:
+      - nova-net
 
   piper:
     image: rhasspy/wyoming-piper:latest
@@ -78,6 +86,8 @@ services:
     volumes:
       - ./data/piper:/data
     restart: unless-stopped
+    networks:
+      - nova-net
 
   # --- Observability: ship logs + host metrics to OpenObserve (Coolify service) ---
   vector:
@@ -92,6 +102,8 @@ services:
       - ./infra/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
+    networks:
+      - nova-net
 
   # --- OpenObserve alert → Forgejo issue bridge (closed-loop incident intake) ---
   ops-bridge:
@@ -105,6 +117,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    networks:
+      - nova-net
 
   radicale:
     image: tomsquest/docker-radicale:latest
@@ -113,6 +127,8 @@ services:
     volumes:
       - ./data/radicale:/data
     restart: unless-stopped
+    networks:
+      - nova-net
 
   caddy:
     image: caddy:2
@@ -125,4 +141,11 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data
     restart: unless-stopped
+    networks:
+      - nova-net
+
+networks:
+  nova-net:
+    name: nova-net
+    external: false
 
