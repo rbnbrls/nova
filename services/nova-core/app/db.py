@@ -1,7 +1,11 @@
 """Database helper module using asyncpg."""
 from __future__ import annotations
+import os
 
 import asyncpg
+
+from alembic import command
+from alembic.config import Config
 
 from .config import settings
 
@@ -22,52 +26,38 @@ async def close_pool():
         _pool = None
 
 
-async def run_migrations():
+async def get_user_memories(user_name: str) -> str:
+    """Return formatted memories for a user: their private + all household-scope memories."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        await conn.execute(
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_inbound_at TIMESTAMP WITH TIME ZONE"
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", user_name)
+        if not user_id:
+            return ""
+        rows = await conn.fetch(
+            """
+            SELECT content, scope FROM memories
+            WHERE (user_id = $1 AND scope = 'private') OR scope = 'household'
+            ORDER BY created_at DESC LIMIT 20
+            """,
+            user_id
         )
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS processed_emails (
-                email_id VARCHAR(255) PRIMARY KEY,
-                processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS user_preferences (
-                user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-                whatsapp_number TEXT UNIQUE,
-                dnd_enabled BOOLEAN DEFAULT FALSE,
-                dnd_start TIME DEFAULT '22:00:00',
-                dnd_end TIME DEFAULT '07:00:00',
-                morning_briefing_enabled BOOLEAN DEFAULT TRUE,
-                morning_briefing_time TIME DEFAULT '07:00:00',
-                weekly_briefing_enabled BOOLEAN DEFAULT TRUE,
-                weekly_briefing_day INTEGER DEFAULT 1,
-                weekly_briefing_time TIME DEFAULT '09:00:00',
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS whatsapp_verification_codes (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                whatsapp_number TEXT NOT NULL,
-                code TEXT NOT NULL,
-                attempts INTEGER DEFAULT 0,
-                expires_at TIMESTAMPTZ NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
+    if not rows:
+        return ""
+    lines = [f"- {r['content']} [{r['scope']}]" for r in rows]
+    return "\n".join(lines)
 
+
+def _run_alembic_upgrade():
+    _dir = os.path.dirname(os.path.abspath(__file__))
+    alembic_cfg = Config(os.path.join(_dir, "..", "alembic.ini"))
+    command.upgrade(alembic_cfg, "head")
+
+
+async def run_migrations():
+    _run_alembic_upgrade()
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
         if settings.nova_whatsapp_users:
             for entry in settings.nova_whatsapp_users.split(","):
                 entry = entry.strip()
@@ -91,18 +81,74 @@ async def run_migrations():
                             user_id,
                             number
                         )
+                        # Mirror WhatsApp number into channel_identities for unified resolution
+                        await conn.execute(
+                            """
+                            INSERT INTO channel_identities (user_id, channel, channel_id)
+                            VALUES ($1, 'whatsapp', $2)
+                            ON CONFLICT (channel, channel_id) DO NOTHING
+                            """,
+                            user_id,
+                            number
+                        )
 
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS queued_notifications (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                whatsapp_number TEXT NOT NULL,
-                message_text TEXT NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
+        if settings.nova_telegram_users:
+            for entry in settings.nova_telegram_users.split(","):
+                entry = entry.strip()
+                if not entry or ":" not in entry:
+                    continue
+                chat_id, name = entry.split(":", 1)
+                chat_id = chat_id.strip()
+                name = name.strip()
+                user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", name)
+                if user_id:
+                    exists = await conn.fetchval(
+                        "SELECT 1 FROM channel_identities WHERE channel = 'telegram' AND channel_id = $1",
+                        chat_id
+                    )
+                    if not exists:
+                        await conn.execute(
+                            """
+                            INSERT INTO channel_identities (user_id, channel, channel_id)
+                            VALUES ($1, 'telegram', $2)
+                            ON CONFLICT (channel, channel_id) DO NOTHING
+                            """,
+                            user_id,
+                            chat_id
+                        )
 
-
+        if settings.nova_voice_room_defaults:
+            import re as _room_re
+            for entry in settings.nova_voice_room_defaults.split(","):
+                entry = entry.strip()
+                if not entry or ":" not in entry:
+                    continue
+                room_id, name = entry.split(":", 1)
+                room_id = room_id.strip()
+                name = name.strip()
+                # Validate room_id: non-empty alphanumeric + underscore
+                if not room_id or not _room_re.match(r"^[a-zA-Z0-9_]+$", room_id):
+                    import logging
+                    logging.getLogger("nova-core").warning(
+                        f"Skipping malformed voice room entry: room_id={room_id!r}"
+                    )
+                    continue
+                user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", name)
+                if not user_id:
+                    import logging
+                    logging.getLogger("nova-core").warning(
+                        f"Skipping voice room entry {room_id}:{name} — user not found"
+                    )
+                    continue
+                await conn.execute(
+                    """
+                    INSERT INTO voice_room_defaults (room_id, default_user_id)
+                    VALUES ($1, $2)
+                    ON CONFLICT (room_id) DO UPDATE SET
+                        default_user_id = EXCLUDED.default_user_id,
+                        updated_at = now()
+                    """,
+                    room_id,
+                    user_id
+                )
 

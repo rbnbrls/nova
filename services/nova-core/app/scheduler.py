@@ -5,14 +5,16 @@ from datetime import datetime, time, timezone, timedelta
 import zoneinfo
 
 from .config import settings
-from .db import get_pool
-from .whatsapp import send_whatsapp_message
+from .db import get_pool, get_user_memories
+from . import maintenance
+from .channels.whatsapp import send_whatsapp_message
+from .channels.dispatcher import send_to_user
 from .tools.calendar import _get_calendar
 from .tools.email import fetch_emails_from_graph, classify_importance
 
 
-async def send_morning_briefing_for_user(user_name: str, number: str):
-    """Send personalized morning briefing to a specific user number."""
+async def send_morning_briefing_for_user(user_name: str):
+    """Send personalized morning briefing to a specific user."""
     tz = zoneinfo.ZoneInfo(settings.nova_timezone)
     now_local = datetime.now(tz)
     start_of_today = datetime.combine(now_local.date(), time.min, tzinfo=tz)
@@ -20,14 +22,12 @@ async def send_morning_briefing_for_user(user_name: str, number: str):
     
     pool = await get_pool()
     
-    # 1. Fetch recent important emails (shared across all users)
     emails = await fetch_emails_from_graph(limit=10)
     important_mails = []
     for mail in emails:
         if await classify_importance(mail["subject"], mail["from"], mail["preview"]):
             important_mails.append(mail)
             
-    # Get tasks assigned to this user
     async with pool.acquire() as conn:
         user_row = await conn.fetchrow("SELECT id FROM users WHERE name = $1", user_name)
         if user_row:
@@ -42,14 +42,11 @@ async def send_morning_briefing_for_user(user_name: str, number: str):
         else:
             tasks = []
             
-    # Query user-specific or shared calendar events for today
     calendar = _get_calendar()
     events = calendar.search(start=start_of_today, end=end_of_today, event=True, expand=True)
     
-    # Build briefing string
     briefing = f"Good morning, {user_name}! Here is your briefing for today.\n\n"
     
-    # Tasks Section
     briefing += "*Your Active Tasks:*\n"
     if tasks:
         for t in tasks:
@@ -57,10 +54,8 @@ async def send_morning_briefing_for_user(user_name: str, number: str):
             briefing += f"- {t['title']}{due_str}\n"
     else:
         briefing += "- No tasks assigned.\n"
-        
     briefing += "\n"
     
-    # Calendar Section
     briefing += "*Today's Calendar:*\n"
     if events:
         for ev in events:
@@ -71,10 +66,8 @@ async def send_morning_briefing_for_user(user_name: str, number: str):
             briefing += f"- {summary} ({time_str})\n"
     else:
         briefing += "- No events today.\n"
-        
     briefing += "\n"
     
-    # Emails Section
     briefing += "*Important Emails:*\n"
     if important_mails:
         for mail in important_mails[:3]:
@@ -82,12 +75,17 @@ async def send_morning_briefing_for_user(user_name: str, number: str):
     else:
         briefing += "- No new important emails.\n"
         
-    # Send via WhatsApp E.164
-    await send_whatsapp_message(number, briefing, proactive=True)
+    # Per D-04: Include per-user memories (private + household)
+    user_memories = await get_user_memories(user_name)
+    if user_memories:
+        briefing += "\n*Nova remembers:*\n"
+        briefing += user_memories + "\n"
+        
+    await send_to_user(user_name, briefing, proactive=True)
 
 
-async def send_weekly_briefing_for_user(user_name: str, number: str):
-    """Send personalized 7-day outlook weekly briefing to a specific user number."""
+async def send_weekly_briefing_for_user(user_name: str):
+    """Send personalized 7-day outlook weekly briefing to a specific user."""
     tz = zoneinfo.ZoneInfo(settings.nova_timezone)
     now_local = datetime.now(tz)
     start_of_today = datetime.combine(now_local.date(), time.min, tzinfo=tz)
@@ -95,14 +93,12 @@ async def send_weekly_briefing_for_user(user_name: str, number: str):
     
     pool = await get_pool()
     
-    # 1. Fetch recent important emails
     emails = await fetch_emails_from_graph(limit=10)
     important_mails = []
     for mail in emails:
         if await classify_importance(mail["subject"], mail["from"], mail["preview"]):
             important_mails.append(mail)
             
-    # Get tasks assigned to this user
     async with pool.acquire() as conn:
         user_row = await conn.fetchrow("SELECT id FROM users WHERE name = $1", user_name)
         if user_row:
@@ -117,14 +113,11 @@ async def send_weekly_briefing_for_user(user_name: str, number: str):
         else:
             tasks = []
             
-    # Query calendar events for the next 7 days
     calendar = _get_calendar()
     events = calendar.search(start=start_of_today, end=end_of_week, event=True, expand=True)
     
-    # Build briefing string
     briefing = f"Good morning, {user_name}! Here is your weekly briefing.\n\n"
     
-    # Tasks Section
     briefing += "*Your Active Tasks:*\n"
     if tasks:
         for t in tasks:
@@ -132,10 +125,8 @@ async def send_weekly_briefing_for_user(user_name: str, number: str):
             briefing += f"- {t['title']}{due_str}\n"
     else:
         briefing += "- No tasks assigned.\n"
-        
     briefing += "\n"
     
-    # Calendar Section (7 Days)
     briefing += "*Upcoming Events (7 Days):*\n"
     if events:
         for ev in events:
@@ -146,10 +137,8 @@ async def send_weekly_briefing_for_user(user_name: str, number: str):
             briefing += f"- {summary} ({time_str})\n"
     else:
         briefing += "- No upcoming events.\n"
-        
     briefing += "\n"
     
-    # Emails Section
     briefing += "*Recent Important Emails:*\n"
     if important_mails:
         for mail in important_mails[:3]:
@@ -157,16 +146,19 @@ async def send_weekly_briefing_for_user(user_name: str, number: str):
     else:
         briefing += "- No new important emails.\n"
         
-    # Send via WhatsApp E.164
-    await send_whatsapp_message(number, briefing, proactive=True)
+    # Per D-04: Include per-user memories (private + household)
+    user_memories = await get_user_memories(user_name)
+    if user_memories:
+        briefing += "\n*Nova remembers:*\n"
+        briefing += user_memories + "\n"
+        
+    await send_to_user(user_name, briefing, proactive=True)
 
 
+# DEPRECATED: Use run_briefing_scheduler() directly.
 async def send_morning_briefing():
-    """Daily morning briefing summarizing tasks, calendar events, and important emails (legacy/fallback)."""
-    from . import identity
-    users_map = await identity.get_all_whatsapp_users()
-    for number, user in users_map.items():
-        await send_morning_briefing_for_user(user.name, number)
+    """Legacy entry point — delegates to per-user scheduler."""
+    await run_briefing_scheduler()
 
 
 async def run_briefing_scheduler():
@@ -183,65 +175,82 @@ async def run_briefing_scheduler():
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT u.name, up.whatsapp_number, 
+                SELECT u.name,
                        up.morning_briefing_enabled, up.morning_briefing_time,
                        up.weekly_briefing_enabled, up.weekly_briefing_day, up.weekly_briefing_time
                 FROM user_preferences up
                 JOIN users u ON up.user_id = u.id
-                WHERE up.whatsapp_number IS NOT NULL
                 """
             )
             for r in rows:
                 name = r["name"]
-                number = r["whatsapp_number"]
                 
-                # Check morning briefing
                 if r["morning_briefing_enabled"] and r["morning_briefing_time"]:
                     m_time = r["morning_briefing_time"]
                     if m_time.hour == current_time.hour and m_time.minute == current_time.minute:
-                        await send_morning_briefing_for_user(name, number)
+                        await send_morning_briefing_for_user(name)
                         
-                # Check weekly briefing
                 if r["weekly_briefing_enabled"] and r["weekly_briefing_day"] and r["weekly_briefing_time"]:
                     w_day = r["weekly_briefing_day"]
                     w_time = r["weekly_briefing_time"]
                     if w_day == current_day and w_time.hour == current_time.hour and w_time.minute == current_time.minute:
-                        await send_weekly_briefing_for_user(name, number)
+                        await send_weekly_briefing_for_user(name)
     except Exception as e:
         print(f"[ERROR] Briefing scheduler error: {e}")
 
 
 async def check_overdue_tasks():
-    """Hourly check for tasks that are past their due dates."""
+    """Check for overdue tasks and send escalation reminders.
+
+    Escalation stages:
+    - DAY_OF: Due today but not completed → "gentle" reminder
+    - 1-2 DAYS OVERDUE: "Don't forget" → firmer
+    - 3+ DAYS OVERDUE: Overdue flag (also shown on dashboard)
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
-        overdue_tasks = await conn.fetch(
+        tasks = await conn.fetch(
             """
             SELECT t.title, t.due_at, u.name as assignee, u.id as user_id
             FROM tasks t
             LEFT JOIN users u ON t.assignee_id = u.id
-            WHERE t.status = 'active' AND t.due_at < now()
+            WHERE t.status = 'active' AND t.due_at < now() + interval '1 day'
             """
         )
-        
-    if not overdue_tasks:
+
+    if not tasks:
         return
-        
-    for task in overdue_tasks:
-        # Find E.164 number for assignee
+
+    from datetime import timezone
+    now_utc = datetime.now(timezone.utc)
+
+    for task in tasks:
         assignee_name = task["assignee"]
-        number = None
-        from . import identity
-        users_map = await identity.get_all_whatsapp_users()
-        for phone, usr in users_map.items():
-            if usr.name == assignee_name:
-                number = phone
-                break
-                
-        if number:
-            due_str = task["due_at"].strftime('%Y-%m-%d %H:%M')
-            alert = f"Reminder: Your task '{task['title']}' was due at {due_str}."
-            await send_whatsapp_message(number, alert, proactive=True)
+        if not assignee_name:
+            continue
+
+        due_at = task["due_at"]
+        if not due_at:
+            continue
+
+        hours_overdue = (now_utc - due_at).total_seconds() / 3600
+        title = task["title"]
+
+        if hours_overdue < 0:
+            # Due today (within next 24h, not yet overdue) — gentle reminder
+            due_str = due_at.strftime('%H:%M')
+            alert = f"Gentle reminder: '{title}' is due today at {due_str}."
+            await send_to_user(assignee_name, alert, proactive=True)
+        elif hours_overdue < 48:
+            # 0-48 hours overdue — firm reminder
+            days_str = "today" if hours_overdue < 24 else "yesterday"
+            alert = f"Reminder: '{title}' was due {days_str}. Please complete it."
+            await send_to_user(assignee_name, alert, proactive=True)
+        else:
+            # 48+ hours overdue — overdue flag
+            days_over = int(hours_overdue / 24)
+            alert = f"⚠ Overdue ({days_over}d): '{title}'. Please complete as soon as possible."
+            await send_to_user(assignee_name, alert, proactive=True)
 
 
 async def check_new_emails():
@@ -272,22 +281,24 @@ async def check_new_emails():
                 mail["id"]
             )
             
-        # Push alert to all registered household users
         alert = (
             f"New Important Email\n"
             f"From: {mail['from']}\n"
             f"Subject: {mail['subject']}\n"
             f"Preview: {mail['preview']}"
         )
-        from . import identity
-        users_map = await identity.get_all_whatsapp_users()
-        for number in users_map:
-            await send_whatsapp_message(number, alert, proactive=True)
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            user_rows = await conn.fetch(
+                "SELECT u.name FROM user_preferences up JOIN users u ON up.user_id = u.id"
+            )
+            for row in user_rows:
+                await send_to_user(row["name"], alert, proactive=True)
 
 
 async def process_queued_notifications():
     """Runs every minute to flush queued notifications for users whose DND window has ended."""
-    from .db import get_pool
+    from .db import get_pool, get_user_memories
     from .identity import is_user_in_dnd
     
     pool = await get_pool()
@@ -295,7 +306,7 @@ async def process_queued_notifications():
         async with pool.acquire() as conn:
             queued = await conn.fetch(
                 """
-                SELECT q.id, q.whatsapp_number, q.message_text, u.name
+                SELECT q.id, q.whatsapp_number, q.message_text, q.channel, u.name
                 FROM queued_notifications q
                 JOIN users u ON q.user_id = u.id
                 ORDER BY q.created_at ASC
@@ -303,13 +314,52 @@ async def process_queued_notifications():
             )
             for row in queued:
                 name = row["name"]
-                number = row["whatsapp_number"]
                 msg_text = row["message_text"]
+                channel = row["channel"] or "whatsapp"
                 
-                # Check if this user is still in DND
                 in_dnd = await is_user_in_dnd(name)
                 if not in_dnd:
-                    await send_whatsapp_message(number, msg_text, proactive=False)
+                    if channel == "telegram":
+                        print(f"[DND REPLAY] Delivering queued Telegram message to {name}")
+                        from .channels.telegram import adapter as telegram_adapter
+                        await telegram_adapter.send_message(name, msg_text, proactive=False)
+                    else:
+                        number = row["whatsapp_number"]
+                        if number:
+                            await send_whatsapp_message(number, msg_text, proactive=False)
                     await conn.execute("DELETE FROM queued_notifications WHERE id = $1", row["id"])
     except Exception as e:
         print(f"[ERROR] Error processing queued notifications: {e}")
+
+
+# ------------------------------------------------------------------
+# Scheduled Maintenance Agent (Phase 29)
+# ------------------------------------------------------------------
+
+
+async def run_maintenance_dep_scan():
+    """Nightly dependency/CVE check."""
+    if not settings.maintenance_dep_check_enabled:
+        return
+    await maintenance.dependency_scanner.run_dependency_scan()
+
+
+async def run_maintenance_log_anomaly():
+    """Nightly log-anomaly review."""
+    if not settings.maintenance_log_anomaly_enabled:
+        return
+    await maintenance.log_anomaly.run_log_anomaly_review()
+
+
+async def run_maintenance_backup_verify():
+    """Nightly backup verification."""
+    if not settings.maintenance_backup_verify_enabled:
+        return
+    await maintenance.backup_verifier.run_backup_verification()
+
+
+async def run_maintenance_trend_report():
+    """Weekly disk/VRAM trend report."""
+    if not settings.maintenance_trend_report_enabled:
+        return
+    await maintenance.trend_reporter.run_trend_report()

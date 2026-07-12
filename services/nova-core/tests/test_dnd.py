@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
 
 from app.identity import is_user_in_dnd, User
-from app.whatsapp import send_whatsapp_message
+from app.channels.whatsapp import send_whatsapp_message
 from app.scheduler import process_queued_notifications
 from app.main import app
 
@@ -57,8 +57,8 @@ async def test_proactive_queued_during_dnd():
     mock_pool = MagicMock()
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
     
-    with patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
-         patch("app.whatsapp.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve, \
+    with patch("app.channels.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.channels.whatsapp.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve, \
          patch("app.identity.is_user_in_dnd", new_callable=AsyncMock) as mock_dnd, \
          patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
          

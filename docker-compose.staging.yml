@@ -1,0 +1,34 @@
+# Nova staging stack — deployed alongside production for model evaluation
+# and change validation. Connects to the same Postgres and Ollama instances
+# as production but uses a separate database (nova_staging) and port.
+#
+# Usage: docker compose -f docker-compose.staging.yml up -d
+# (Requires the production stack to be running on the nova-net network.)
+
+services:
+  nova-staging:
+    build: ./services/nova-core
+    entrypoint: ["/app/staging-entrypoint.sh"]
+    env_file: .env.staging
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+      ollama:
+        condition: service_started
+        restart: true
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - nova-net
+
+networks:
+  nova-net:
+    name: nova-net
+    external: true

@@ -17,6 +17,7 @@ eventSource.onmessage = function(event) {
         const data = JSON.parse(event.data);
         updateTasks(data.tasks);
         updateEvents(data.events);
+        updateAudit(data.audit);
         document.querySelector('.status-text').textContent = 'Live Connected';
         document.querySelector('.pulse-dot').style.backgroundColor = '#10b981';
     } catch (e) {
@@ -86,9 +87,13 @@ function updateTasks(tasks) {
                 dueHtml = `<span class="${overdueClass}">${isOverdue ? 'Overdue: ' : ''}${formattedTime}</span>`;
             }
             
+            const overdueBadge = task.overdue
+                ? `<span class="badge badge-warning">OVERDUE</span> `
+                : '';
+            
             html += `
-                <li class="todo-item">
-                    <span class="todo-title">${task.title}</span>
+                <li class="todo-item${task.overdue ? ' overdue-flag' : ''}">
+                    <span class="todo-title">${overdueBadge}${escapeHtml(task.title)}</span>
                     ${dueHtml}
                 </li>
             `;
@@ -158,6 +163,42 @@ function updateEvents(events) {
     container.innerHTML = html;
 }
 
+// Render Audit Activity Feed
+function updateAudit(entries) {
+    const container = document.getElementById('audit-content');
+    const countBadge = document.getElementById('audit-count');
+
+    if (!entries || entries.length === 0) {
+        container.innerHTML = '<div class="placeholder-loader">No recent activity.</div>';
+        countBadge.textContent = '0';
+        return;
+    }
+
+    countBadge.textContent = entries.length;
+
+    let html = '<table class="audit-table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Status</th></tr></thead><tbody>';
+    entries.forEach(entry => {
+        const ts = entry.timestamp ? new Date(entry.timestamp) : new Date();
+        const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+        const statusClass = entry.status === 'denied' ? 'status-denied' : 'status-completed';
+        const statusLabel = entry.status === 'denied' ? '\u{1F6AB} Denied' : '\u2705 Done';
+        const confirmIcon = entry.confirmation_required ? '\u{1F6E1}\uFE0F ' : '';
+        html += `<tr>
+            <td class="audit-time">${timeStr}</td>
+            <td class="audit-user">${entry.user_name || 'system'}</td>
+            <td class="audit-action">${confirmIcon}${escapeHtml(entry.action_summary)}</td>
+            <td class="audit-status"><span class="${statusClass}">${statusLabel}</span></td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 // --- Preferences & Onboarding Settings ---
 let preferencesCache = {};
@@ -188,13 +229,15 @@ function updateSettingsUI() {
         dnd_end: '07:00'
     };
     const linkedVal = document.getElementById('linked-number-val');
-    const phoneInput = document.getElementById('phone-input');
-    
     if (linkedVal) {
         linkedVal.textContent = userPrefs.whatsapp_number ? '+' + userPrefs.whatsapp_number : 'None Linked';
     }
-    if (phoneInput && document.getElementById('verify-code-row').classList.contains('hidden')) {
-        phoneInput.value = userPrefs.whatsapp_number || '';
+
+    const telegramStatus = document.getElementById('telegram-status-val');
+    if (telegramStatus) {
+        const channels = userPrefs.channels_enabled || [];
+        telegramStatus.textContent = channels.includes('telegram') ? 'Linked' : 'Not Linked';
+        telegramStatus.style.color = channels.includes('telegram') ? 'var(--success-color)' : 'var(--text-secondary)';
     }
     
     const morningEnabled = document.getElementById('morning-enabled');
@@ -223,8 +266,6 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.classList.add('active');
         activeSettingsUser = tab.getAttribute('data-user');
         
-        // Reset verify view
-        cancelVerifyState();
         updateSettingsUI();
     });
 });
@@ -246,84 +287,370 @@ function clearMsg() {
     }
 }
 
-function cancelVerifyState() {
-    document.getElementById('verify-code-row').classList.add('hidden');
-    document.getElementById('request-code-row').classList.remove('hidden');
-    document.getElementById('code-input').value = '';
-    clearMsg();
+// --- WhatsApp Linking Modal ---
+let modalActiveUser = 'Ruben';
+let modalState = 'number';  // 'number' | 'code' | 'result'
+let modalPendingNumber = '';
+
+function showModalState(state) {
+    // Hide all state divs
+    document.getElementById('modal-state-number').classList.add('hidden');
+    document.getElementById('modal-state-code').classList.add('hidden');
+    document.getElementById('modal-state-result').classList.add('hidden');
+
+    const title = document.getElementById('modal-title');
+    if (state === 'number') {
+        title.textContent = 'Link WhatsApp';
+        document.getElementById('modal-state-number').classList.remove('hidden');
+    } else if (state === 'code') {
+        title.textContent = 'Verify Code';
+        document.getElementById('modal-state-code').classList.remove('hidden');
+    } else if (state === 'result') {
+        title.textContent = 'Linking Complete';
+        document.getElementById('modal-state-result').classList.remove('hidden');
+    }
+    modalState = state;
 }
 
-// Request verification code button click
-const btnRequestCode = document.getElementById('btn-request-code');
-if (btnRequestCode) {
-    btnRequestCode.addEventListener('click', async () => {
-        clearMsg();
-        const number = document.getElementById('phone-input').value.trim();
-        if (!number) {
-            showMsg('Please enter a WhatsApp phone number', true);
-            return;
-        }
-        
-        try {
-            const resp = await fetch('/api/preferences/request-code', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user: activeSettingsUser, number: number })
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                showMsg('Verification code sent successfully!');
-                document.getElementById('request-code-row').classList.add('hidden');
-                document.getElementById('verify-code-row').classList.remove('hidden');
-            } else {
-                showMsg(data.detail || 'Failed to request verification code', true);
-            }
-        } catch (err) {
-            showMsg('Network error requesting verification code', true);
-        }
+function hideModal() {
+    document.getElementById('link-modal').classList.add('hidden');
+    document.getElementById('modal-phone-input').value = '';
+    document.getElementById('modal-code-input').value = '';
+    clearModalErrors();
+    showModalState('number');
+}
+
+function showModalError(elementId, message) {
+    const el = document.getElementById(elementId);
+    if (el) {
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+}
+
+function clearModalErrors() {
+    ['modal-error-msg', 'modal-code-error-msg'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
     });
 }
 
-// Verify and Link button click
-const btnVerifyCode = document.getElementById('btn-verify-code');
-if (btnVerifyCode) {
-    btnVerifyCode.addEventListener('click', async () => {
-        clearMsg();
-        const code = document.getElementById('code-input').value.trim();
-        if (!code) {
-            showMsg('Please enter the 6-digit code', true);
-            return;
+// Open modal button
+document.getElementById('btn-open-link-modal').addEventListener('click', () => {
+    // Set active user from settings tabs
+    modalActiveUser = activeSettingsUser;
+    // Reset identity tab highlights
+    document.querySelectorAll('.modal-user-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.getAttribute('data-user') === modalActiveUser);
+    });
+    clearModalErrors();
+    document.getElementById('modal-phone-input').value = '';
+    document.getElementById('modal-code-input').value = '';
+    showModalState('number');
+    document.getElementById('link-modal').classList.remove('hidden');
+});
+
+// Modal identity tabs
+document.querySelectorAll('.modal-user-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.modal-user-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        modalActiveUser = tab.getAttribute('data-user');
+    });
+});
+
+// Send Code button
+document.getElementById('modal-btn-send-code').addEventListener('click', async () => {
+    clearModalErrors();
+    const number = document.getElementById('modal-phone-input').value.trim();
+    if (!number) {
+        showModalError('modal-error-msg', 'Please enter a phone number');
+        return;
+    }
+    if (!/^\d{8,}$/.test(number.replace(/^\+/, ''))) {
+        showModalError('modal-error-msg', 'Invalid phone number. Use E.164 format (e.g. 31612345678)');
+        return;
+    }
+
+    const cleanNumber = number.replace(/^\+/, '');
+    try {
+        const resp = await fetch('/dashboard/link-whatsapp/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: modalActiveUser, number: cleanNumber })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            modalPendingNumber = cleanNumber;
+            document.getElementById('modal-sent-to').textContent = '+' + cleanNumber;
+            document.getElementById('modal-code-input').value = '';
+            clearModalErrors();
+            showModalState('code');
+        } else if (resp.status === 429) {
+            showModalError('modal-error-msg', data.detail || 'Rate limit reached. Please wait 5 minutes.');
+        } else {
+            showModalError('modal-error-msg', data.detail || 'Failed to send code. Please try again.');
         }
-        
-        try {
-            const resp = await fetch('/api/preferences/verify-code', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user: activeSettingsUser, code: code })
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                showMsg(`Successfully linked +${data.linked_number}!`);
-                setTimeout(() => {
-                    cancelVerifyState();
-                    fetchPreferences();
-                }, 2000);
-            } else {
-                showMsg(data.detail || 'Incorrect or expired code', true);
-            }
-        } catch (err) {
-            showMsg('Network error verifying code', true);
+    } catch (err) {
+        showModalError('modal-error-msg', 'Network error. Please check your connection and try again.');
+    }
+});
+
+// Verify & Link button
+document.getElementById('modal-btn-verify').addEventListener('click', async () => {
+    clearModalErrors();
+    const code = document.getElementById('modal-code-input').value.trim();
+    if (!code || code.length !== 6) {
+        showModalError('modal-code-error-msg', 'Please enter the 6-digit code');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/dashboard/link-whatsapp/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: modalActiveUser, code: code })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            // Success state
+            const resultMsg = document.getElementById('modal-result-msg');
+            resultMsg.innerHTML = '✅ Successfully linked +' + data.linked_number + '!';
+            resultMsg.className = 'modal-result-success';
+            document.getElementById('modal-btn-retry').classList.add('hidden');
+            showModalState('result');
+            // Auto-refresh preferences to update the linked number display
+            fetchPreferences();
+            // Auto-close after 3 seconds
+            setTimeout(() => {
+                hideModal();
+                // Reset retry visibility for next time
+                document.getElementById('modal-btn-retry').classList.remove('hidden');
+            }, 3000);
+        } else {
+            showModalError('modal-code-error-msg', data.detail || 'Incorrect or expired code');
         }
+    } catch (err) {
+        showModalError('modal-code-error-msg', 'Network error. Please try again.');
+    }
+});
+
+// Resend Code button
+document.getElementById('modal-btn-resend').addEventListener('click', async () => {
+    clearModalErrors();
+    const number = modalPendingNumber;
+    if (!number) {
+        showModalState('number');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/dashboard/link-whatsapp/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: modalActiveUser, number: number })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            document.getElementById('modal-code-input').value = '';
+            clearModalErrors();
+            showModalError('modal-code-error-msg', 'A new code has been sent.');
+        } else if (resp.status === 429) {
+            showModalError('modal-code-error-msg', data.detail || 'Please wait before requesting a new code.');
+        } else {
+            showModalError('modal-code-error-msg', data.detail || 'Failed to resend. Please try again.');
+        }
+    } catch (err) {
+        showModalError('modal-code-error-msg', 'Network error. Please try again.');
+    }
+});
+
+// Try Again button (from error state)
+document.getElementById('modal-btn-retry').addEventListener('click', () => {
+    clearModalErrors();
+    showModalState('number');
+});
+
+// Cancel / Close buttons
+document.getElementById('modal-btn-cancel').addEventListener('click', hideModal);
+document.getElementById('modal-btn-close-result').addEventListener('click', hideModal);
+
+// Click on overlay background closes modal
+document.getElementById('link-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('link-modal')) {
+        hideModal();
+    }
+});
+
+// --- Telegram Linking Modal ---
+let telegramModalActiveUser = 'Ruben';
+let telegramModalState = 'start';  // 'start' | 'code' | 'result'
+
+function showTelegramModalState(state) {
+    document.getElementById('telegram-state-start').classList.add('hidden');
+    document.getElementById('telegram-state-code').classList.add('hidden');
+    document.getElementById('telegram-state-result').classList.add('hidden');
+
+    const title = document.getElementById('telegram-modal-title');
+    if (state === 'start') {
+        title.textContent = 'Link Telegram';
+        document.getElementById('telegram-state-start').classList.remove('hidden');
+    } else if (state === 'code') {
+        title.textContent = 'Verify Code';
+        document.getElementById('telegram-state-code').classList.remove('hidden');
+    } else if (state === 'result') {
+        title.textContent = 'Linking Complete';
+        document.getElementById('telegram-state-result').classList.remove('hidden');
+    }
+    telegramModalState = state;
+}
+
+function hideTelegramModal() {
+    document.getElementById('link-telegram-modal').classList.add('hidden');
+    document.getElementById('telegram-code-input').value = '';
+    clearTelegramModalErrors();
+    showTelegramModalState('start');
+}
+
+function showTelegramModalError(elementId, message) {
+    const el = document.getElementById(elementId);
+    if (el) {
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+}
+
+function clearTelegramModalErrors() {
+    ['telegram-error-msg', 'telegram-code-error-msg'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
     });
 }
 
-// Cancel verification
-const btnCancelVerify = document.getElementById('btn-cancel-verify');
-if (btnCancelVerify) {
-    btnCancelVerify.addEventListener('click', () => {
-        cancelVerifyState();
+// Open Telegram modal button
+document.getElementById('btn-open-telegram-modal').addEventListener('click', () => {
+    telegramModalActiveUser = activeSettingsUser;
+    document.querySelectorAll('.telegram-user-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.getAttribute('data-user') === telegramModalActiveUser);
     });
-}
+    clearTelegramModalErrors();
+    document.getElementById('telegram-code-input').value = '';
+    showTelegramModalState('start');
+    document.getElementById('link-telegram-modal').classList.remove('hidden');
+});
+
+// Telegram modal identity tabs
+document.querySelectorAll('.telegram-user-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.telegram-user-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        telegramModalActiveUser = tab.getAttribute('data-user');
+    });
+});
+
+// Send Code button
+document.getElementById('telegram-btn-send-code').addEventListener('click', async () => {
+    clearTelegramModalErrors();
+    try {
+        const resp = await fetch('/dashboard/link-telegram/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: telegramModalActiveUser })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            document.getElementById('telegram-code-input').value = '';
+            clearTelegramModalErrors();
+            showTelegramModalState('code');
+        } else if (resp.status === 429) {
+            showTelegramModalError('telegram-error-msg', data.detail || 'Rate limit reached. Please wait 5 minutes.');
+        } else if (resp.status === 502) {
+            showTelegramModalError('telegram-error-msg', data.detail || 'Failed to send code. Please try again.');
+        } else {
+            showTelegramModalError('telegram-error-msg', data.detail || 'Failed to send code. Please try again.');
+        }
+    } catch (err) {
+        showTelegramModalError('telegram-error-msg', 'Network error. Please check your connection and try again.');
+    }
+});
+
+// Verify & Link button
+document.getElementById('telegram-btn-verify').addEventListener('click', async () => {
+    clearTelegramModalErrors();
+    const code = document.getElementById('telegram-code-input').value.trim();
+    if (!code || code.length !== 6) {
+        showTelegramModalError('telegram-code-error-msg', 'Please enter the 6-digit code');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/dashboard/link-telegram/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: telegramModalActiveUser, code: code })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            const resultMsg = document.getElementById('telegram-result-msg');
+            resultMsg.innerHTML = '✅ Successfully linked Telegram!';
+            resultMsg.className = 'modal-result-success';
+            document.getElementById('telegram-btn-retry').classList.add('hidden');
+            showTelegramModalState('result');
+            // Auto-refresh preferences to update the Telegram status display
+            fetchPreferences();
+            // Auto-close after 3 seconds
+            setTimeout(() => {
+                hideTelegramModal();
+                document.getElementById('telegram-btn-retry').classList.remove('hidden');
+            }, 3000);
+        } else {
+            showTelegramModalError('telegram-code-error-msg', data.detail || 'Incorrect or expired code');
+        }
+    } catch (err) {
+        showTelegramModalError('telegram-code-error-msg', 'Network error. Please try again.');
+    }
+});
+
+// Resend Code button
+document.getElementById('telegram-btn-resend').addEventListener('click', async () => {
+    clearTelegramModalErrors();
+    try {
+        const resp = await fetch('/dashboard/link-telegram/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: telegramModalActiveUser })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            document.getElementById('telegram-code-input').value = '';
+            clearTelegramModalErrors();
+            showTelegramModalError('telegram-code-error-msg', 'A new code has been sent.');
+        } else if (resp.status === 429) {
+            showTelegramModalError('telegram-code-error-msg', data.detail || 'Please wait before requesting a new code.');
+        } else {
+            showTelegramModalError('telegram-code-error-msg', data.detail || 'Failed to resend. Please try again.');
+        }
+    } catch (err) {
+        showTelegramModalError('telegram-code-error-msg', 'Network error. Please try again.');
+    }
+});
+
+// Try Again button (from error/result state)
+document.getElementById('telegram-btn-retry').addEventListener('click', () => {
+    clearTelegramModalErrors();
+    showTelegramModalState('start');
+});
+
+// Cancel / Close buttons
+document.getElementById('telegram-btn-cancel').addEventListener('click', hideTelegramModal);
+document.getElementById('telegram-btn-close-result').addEventListener('click', hideTelegramModal);
+
+// Click on overlay background closes modal
+document.getElementById('link-telegram-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('link-telegram-modal')) {
+        hideTelegramModal();
+    }
+});
 
 // Save Briefing Settings button click
 const btnSaveSettings = document.getElementById('btn-save-settings');

@@ -28,6 +28,13 @@ def test_webhook_auth_constant_time():
         mock_compare.assert_called_once_with("wrong-token", "secret-token")
 
 
+def test_webhook_missing_token():
+    """Missing X-Bridge-Token header returns 401 without leaking details."""
+    with patch("app.BRIDGE_TOKEN", "secret-token"):
+        resp = client.post("/webhooks/openobserve", headers={})
+        assert resp.status_code == 401
+        assert resp.json() == {"detail": "bad or missing X-Bridge-Token"}
+
 
 @pytest.mark.asyncio
 async def test_webhook_new_issue():

@@ -76,6 +76,50 @@ async def get_all_whatsapp_users() -> dict[str, User]:
     return mapping
 
 
+async def user_from_telegram(chat_id: str) -> User:
+    """Resolve a Telegram chat_id to a household user via channel_identities."""
+    from .db import get_pool
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT u.name
+                FROM channel_identities ci
+                JOIN users u ON ci.user_id = u.id
+                WHERE ci.channel = 'telegram' AND ci.channel_id = $1
+                """,
+                str(chat_id)
+            )
+            if row:
+                return User(name=row["name"])
+    except Exception as e:
+        print(f"[ERROR] DB error resolving Telegram user: {e}")
+    return HOUSEHOLD
+
+
+async def get_all_telegram_users() -> dict[str, User]:
+    """Retrieve all mapped Telegram chat_ids and their corresponding Users from the DB."""
+    from .db import get_pool
+    mapping = {}
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT ci.channel_id, u.name
+                FROM channel_identities ci
+                JOIN users u ON ci.user_id = u.id
+                WHERE ci.channel = 'telegram'
+                """
+            )
+            for r in rows:
+                mapping[r["channel_id"]] = User(name=r["name"])
+    except Exception as e:
+        print(f"[ERROR] DB error getting all Telegram users: {e}")
+    return mapping
+
+
 async def is_user_in_dnd(user_name: str) -> bool:
     """Check if DND is enabled and active for the user at the current local time."""
     import zoneinfo

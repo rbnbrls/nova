@@ -21,6 +21,8 @@ class ChatCompletionRequest(BaseModel):
     messages: list[ChatMessage]
     # Nova extension: which household user this conversation belongs to.
     user: str | None = None
+    # Nova extension: which voice room this request originates from.
+    room: str | None = None
 
 
 class Choice(BaseModel):
@@ -40,11 +42,14 @@ class ChatCompletionResponse(BaseModel):
 class RequestCodeRequest(BaseModel):
     user: str
     number: str
+    channel: str = "whatsapp"
+    channel_id: str = ""
 
 
 class VerifyCodeRequest(BaseModel):
     user: str
     code: str
+    channel_id: str = ""
 
 
 class BriefingSettingsRequest(BaseModel):
@@ -61,6 +66,25 @@ class DNDSettingsRequest(BaseModel):
     dnd_enabled: bool
     dnd_start: str
     dnd_end: str
+
+
+class LinkWhatsAppStartRequest(BaseModel):
+    user: str
+    number: str  # E.164 format, no leading '+'
+
+
+class LinkWhatsAppVerifyRequest(BaseModel):
+    user: str
+    code: str
+
+
+class LinkTelegramStartRequest(BaseModel):
+    user: str
+
+
+class LinkTelegramVerifyRequest(BaseModel):
+    user: str
+    code: str
 
 
 

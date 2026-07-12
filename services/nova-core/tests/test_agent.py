@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from app.agent import run_agent
+from app.llm import ChatResult
 from app.tools.base import tool, TOOLS
 
 
@@ -8,8 +9,10 @@ from app.tools.base import tool, TOOLS
 async def test_run_agent_no_tool_calls():
     # Test agent loop with a direct reply (no tool calls)
     mock_reply = {"role": "assistant", "content": "Hello Ruben! How can I help you?"}
-    with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
-        mock_chat.return_value = mock_reply
+    with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat, \
+         patch("app.agent.get_user_memories", new_callable=AsyncMock) as mock_mem:
+        mock_mem.return_value = ""
+        mock_chat.return_value = ChatResult(message=mock_reply)
         resp = await run_agent("hi", user="Ruben")
         assert resp == "Hello Ruben! How can I help you?"
         mock_chat.assert_called_once()
@@ -55,8 +58,10 @@ async def test_run_agent_with_tool_call():
             "content": "All done!"
         }
 
-        with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.side_effect = [mock_turn1, mock_turn2]
+        with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat, \
+             patch("app.agent.get_user_memories", new_callable=AsyncMock) as mock_mem:
+            mock_mem.return_value = ""
+            mock_chat.side_effect = [ChatResult(message=mock_turn1), ChatResult(message=mock_turn2)]
             resp = await run_agent("run the tool", user="Ruben")
             assert resp == "All done!"
             assert mock_chat.call_count == 2
@@ -82,7 +87,7 @@ def test_chat_completions_user_query_parameter():
             json={"messages": [{"role": "user", "content": "Hello"}], "user": "Ruben"}
         )
         assert resp.status_code == 200
-        mock_run.assert_called_once_with("Hello", user="Meral", history=[])
+        mock_run.assert_called_once_with("Hello", user="Meral", history=[], channel="api")
         mock_run.reset_mock()
         
         # 2. Body user specified, no query parameter
@@ -91,7 +96,7 @@ def test_chat_completions_user_query_parameter():
             json={"messages": [{"role": "user", "content": "Hello"}], "user": "Ruben"}
         )
         assert resp.status_code == 200
-        mock_run.assert_called_once_with("Hello", user="Ruben", history=[])
+        mock_run.assert_called_once_with("Hello", user="Ruben", history=[], channel="api")
         mock_run.reset_mock()
         
         # 3. No user specified
@@ -100,5 +105,52 @@ def test_chat_completions_user_query_parameter():
             json={"messages": [{"role": "user", "content": "Hello"}]}
         )
         assert resp.status_code == 200
-        mock_run.assert_called_once_with("Hello", user="household", history=[])
+        mock_run.assert_called_once_with("Hello", user="household", history=[], channel="api")
+
+
+@pytest.mark.asyncio
+async def test_run_agent_respects_iteration_budget():
+    from app.config import settings
+
+    mock_turn = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "type": "function",
+                "id": "call_loop",
+                "function": {
+                    "name": "test_agent_tool",
+                    "arguments": '{"val": "x"}'
+                }
+            }
+        ]
+    }
+
+    try:
+        @tool(
+            name="test_agent_tool",
+            description="Dummy tool.",
+            parameters={
+                "type": "object",
+                "properties": {"val": {"type": "string"}},
+                "required": ["val"],
+            }
+        )
+        async def dummy_tool(val: str) -> str:
+            return "done"
+
+        original = settings.nova_max_iterations
+        settings.nova_max_iterations = 3
+
+        with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat, \
+             patch("app.agent.get_user_memories", new_callable=AsyncMock) as mock_mem:
+            mock_mem.return_value = ""
+            mock_chat.return_value = ChatResult(message=mock_turn)
+            resp = await run_agent("loop", user="Ruben")
+            assert "got stuck" in resp.lower()
+
+        settings.nova_max_iterations = original
+    finally:
+        TOOLS.pop("test_agent_tool", None)
 

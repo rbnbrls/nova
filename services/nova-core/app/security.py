@@ -15,3 +15,15 @@ def verify_whatsapp_signature(body: bytes, signature_header: str | None, secret:
     h = hmac.new(secret.encode("utf-8"), body, hashlib.sha256)
     actual_hex = h.hexdigest()
     return hmac.compare_digest(actual_hex, expected_hex)
+
+
+def verify_telegram_signature(secret_token: str | None, expected_token: str) -> bool:
+    """Verify Telegram webhook secret token using constant-time comparison.
+
+    Telegram does not use HMAC-signed payloads like WhatsApp.
+    Instead, it uses a pre-shared secret token sent in the
+    X-Telegram-Bot-Api-Secret-Token header.
+    """
+    if not secret_token or not expected_token:
+        return False
+    return hmac.compare_digest(secret_token, expected_token)

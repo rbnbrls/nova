@@ -76,7 +76,7 @@ def test_request_code_success(client):
         # Verify inserted into database
         mock_conn.execute.assert_called_once()
         args, kwargs = mock_conn.execute.call_args
-        assert "INSERT INTO whatsapp_verification_codes" in args[0]
+        assert "INSERT INTO channel_verification_codes" in args[0]
         assert args[1] == "ruben-user-uuid"
         assert args[2] == "31612345678"  # cleaned
         
@@ -129,9 +129,9 @@ def test_verify_code_success(client):
         # Verify attempts increment and linking
         calls = mock_conn.execute.call_args_list
         assert len(calls) == 3
-        assert "UPDATE whatsapp_verification_codes SET attempts = attempts + 1" in calls[0][0][0]
+        assert "UPDATE channel_verification_codes SET attempts = attempts + 1" in calls[0][0][0]
         assert "INSERT INTO user_preferences" in calls[1][0][0]
-        assert "UPDATE whatsapp_verification_codes SET attempts = 99" in calls[2][0][0]
+        assert "UPDATE channel_verification_codes SET attempts = 99" in calls[2][0][0]
 
 
 def test_verify_code_incorrect_attempts_exceeded(client):
@@ -160,7 +160,7 @@ def test_verify_code_incorrect_attempts_exceeded(client):
         
         # Attempts updated
         mock_conn.execute.assert_called_once()
-        assert "UPDATE whatsapp_verification_codes SET attempts = attempts + 1" in mock_conn.execute.call_args[0][0]
+        assert "UPDATE channel_verification_codes SET attempts = attempts + 1" in mock_conn.execute.call_args[0][0]
 
 
 def test_save_briefing_preferences_success(client):

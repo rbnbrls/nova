@@ -46,7 +46,7 @@
             <!-- Bottom Preferences & Identity linking -->
             <section class="dashboard-card glass-panel settings-panel" id="preferences-panel">
                 <div class="card-header">
-                    <h2>WhatsApp Identity & Settings</h2>
+                    <h2>Identity & Settings</h2>
                 </div>
                 <div class="settings-content">
                     <div class="settings-user-selector">
@@ -60,14 +60,19 @@
                                 <span class="status-label">Linked Number:</span>
                                 <span class="status-value" id="linked-number-val">Loading...</span>
                             </div>
-                            <div class="input-row" id="request-code-row">
-                                <input type="text" id="phone-input" placeholder="e.g. 31612345678" />
-                                <button class="btn btn-primary" id="btn-request-code">Send Code</button>
+                            <div class="input-row">
+                                <button class="btn btn-primary" id="btn-open-link-modal">Link WhatsApp</button>
                             </div>
-                            <div class="input-row hidden" id="verify-code-row">
-                                <input type="text" id="code-input" placeholder="6-digit code" />
-                                <button class="btn btn-success" id="btn-verify-code">Verify & Link</button>
-                                <button class="btn btn-secondary" id="btn-cancel-verify">Cancel</button>
+                        </div>
+
+                        <div class="settings-form-group">
+                            <h3>Telegram</h3>
+                            <div class="status-container">
+                                <span class="status-label">Status:</span>
+                                <span class="status-value" id="telegram-status-val">Checking...</span>
+                            </div>
+                            <div class="input-row">
+                                <button class="btn btn-primary" id="btn-open-telegram-modal">Link Telegram</button>
                             </div>
                         </div>
 
@@ -129,6 +134,101 @@
                 </div>
             </section>
         </main>
+
+        <!-- Activity Feed: Phase 36 — Write-Action Audit Trail -->
+        <section class="dashboard-card glass-panel audit-panel" id="audit-panel" style="margin-top: 2rem;">
+            <div class="card-header">
+                <h2>Activity Feed</h2>
+                <span class="badge badge-accent" id="audit-count">0</span>
+            </div>
+            <div class="audit-feed" id="audit-content">
+                <div class="placeholder-loader">Waiting for activity...</div>
+            </div>
+        </section>
+
+        <!-- WhatsApp Linking Modal -->
+        <div id="link-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-title">Link WhatsApp</h3>
+                </div>
+                <div id="modal-body">
+                    <!-- State 1: Identity & Number Entry -->
+                    <div id="modal-state-number">
+                        <div class="modal-user-selector">
+                            <button class="modal-user-tab active" data-user="Ruben">Ruben</button>
+                            <button class="modal-user-tab" data-user="Meral">Méral</button>
+                        </div>
+                        <input type="text" id="modal-phone-input" placeholder="e.g. 31612345678" />
+                        <div class="modal-actions">
+                            <button class="btn btn-primary" id="modal-btn-send-code">Send Code</button>
+                            <button class="btn btn-secondary" id="modal-btn-cancel">Cancel</button>
+                        </div>
+                        <div class="modal-error hidden" id="modal-error-msg"></div>
+                    </div>
+                    <!-- State 2: Code Entry -->
+                    <div id="modal-state-code" class="hidden">
+                        <p>Enter the 6-digit code sent to <strong id="modal-sent-to"></strong></p>
+                        <input type="text" id="modal-code-input" placeholder="6-digit code" maxlength="6" />
+                        <div class="modal-actions">
+                            <button class="btn btn-success" id="modal-btn-verify">Verify &amp; Link</button>
+                            <button class="btn btn-secondary" id="modal-btn-resend">Resend Code</button>
+                        </div>
+                        <div class="modal-error hidden" id="modal-code-error-msg"></div>
+                    </div>
+                    <!-- State 3: Result (Success / Error) -->
+                    <div id="modal-state-result" class="hidden">
+                        <p id="modal-result-msg"></p>
+                        <div class="modal-actions">
+                            <button class="btn btn-primary" id="modal-btn-retry">Try Again</button>
+                            <button class="btn btn-secondary" id="modal-btn-close-result">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Telegram Linking Modal -->
+        <div id="link-telegram-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="telegram-modal-title">Link Telegram</h3>
+                </div>
+                <div id="telegram-modal-body">
+                    <!-- State 1: Identity selection & send code -->
+                    <div id="telegram-state-start">
+                        <p>Send a verification code to your Telegram account.</p>
+                        <div class="modal-user-selector">
+                            <button class="modal-user-tab telegram-user-tab active" data-user="Ruben">Ruben</button>
+                            <button class="modal-user-tab telegram-user-tab" data-user="Meral">Méral</button>
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn btn-primary" id="telegram-btn-send-code">Send Code via Telegram</button>
+                            <button class="btn btn-secondary" id="telegram-btn-cancel">Cancel</button>
+                        </div>
+                        <div class="modal-error hidden" id="telegram-error-msg"></div>
+                    </div>
+                    <!-- State 2: Code entry -->
+                    <div id="telegram-state-code" class="hidden">
+                        <p>A 6-digit code was sent to your Telegram account.</p>
+                        <input type="text" id="telegram-code-input" placeholder="6-digit code" maxlength="6" />
+                        <div class="modal-actions">
+                            <button class="btn btn-success" id="telegram-btn-verify">Verify &amp; Link</button>
+                            <button class="btn btn-secondary" id="telegram-btn-resend">Resend Code</button>
+                        </div>
+                        <div class="modal-error hidden" id="telegram-code-error-msg"></div>
+                    </div>
+                    <!-- State 3: Result -->
+                    <div id="telegram-state-result" class="hidden">
+                        <p id="telegram-result-msg"></p>
+                        <div class="modal-actions">
+                            <button class="btn btn-primary" id="telegram-btn-retry">Try Again</button>
+                            <button class="btn btn-secondary" id="telegram-btn-close-result">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     <script src="app.js"></script>
 </body>
