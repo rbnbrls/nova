@@ -48,10 +48,13 @@ class Tool:
         kwargs = {k: v for k, v in arguments.items() if k in sig.parameters}
         if "user" in sig.parameters:
             kwargs["user"] = user
-        try:
-            return await self.fn(**kwargs)
-        except Exception as exc:  # surface errors to the model, don't crash the loop
-            return f"error: {exc}"
+        last_exc = None
+        for _attempt in range(2):
+            try:
+                return await self.fn(**kwargs)
+            except Exception as exc:
+                last_exc = exc
+        return f"error: {last_exc}"
 
 
 def tool(name: str, description: str, parameters: dict) -> Callable[[ToolFn], ToolFn]:

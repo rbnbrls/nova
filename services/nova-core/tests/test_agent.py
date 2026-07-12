@@ -102,3 +102,48 @@ def test_chat_completions_user_query_parameter():
         assert resp.status_code == 200
         mock_run.assert_called_once_with("Hello", user="household", history=[])
 
+
+@pytest.mark.asyncio
+async def test_run_agent_respects_iteration_budget():
+    from app.config import settings
+
+    mock_turn = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "type": "function",
+                "id": "call_loop",
+                "function": {
+                    "name": "test_agent_tool",
+                    "arguments": '{"val": "x"}'
+                }
+            }
+        ]
+    }
+
+    try:
+        @tool(
+            name="test_agent_tool",
+            description="Dummy tool.",
+            parameters={
+                "type": "object",
+                "properties": {"val": {"type": "string"}},
+                "required": ["val"],
+            }
+        )
+        async def dummy_tool(val: str) -> str:
+            return "done"
+
+        original = settings.nova_max_iterations
+        settings.nova_max_iterations = 3
+
+        with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = mock_turn
+            resp = await run_agent("loop", user="Ruben")
+            assert "got stuck" in resp.lower()
+
+        settings.nova_max_iterations = original
+    finally:
+        TOOLS.pop("test_agent_tool", None)
+

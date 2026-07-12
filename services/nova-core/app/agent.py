@@ -14,7 +14,6 @@ import zoneinfo
 from . import llm, tools
 from .config import settings
 
-MAX_TOOL_ITERATIONS = 6
 MAX_HISTORY_MESSAGES = 20
 
 _CONFIRM_WORDS = {"yes", "confirm", "ok", "okay", "yep", "ja", "sure", "approve"}
@@ -69,7 +68,7 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
 
     try:
         async with asyncio.timeout(60):
-            for _ in range(MAX_TOOL_ITERATIONS):
+            for _ in range(settings.nova_max_iterations):
                 message = await llm.chat(messages, tools=specs)
                 messages.append(message)
 
