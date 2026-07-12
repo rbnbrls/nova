@@ -15,7 +15,7 @@ from . import llm, tools
 from .audit import record_tool_call
 from .config import settings
 
-_MAX_MUTATING_TOOLS = {"add_task", "complete_task", "create_event"}
+_MAX_MUTATING_TOOLS = {"add_task", "complete_task", "create_event", "ha_call_service"}
 MAX_HISTORY_MESSAGES = 20
 
 _CONFIRM_WORDS = {"yes", "confirm", "ok", "okay", "yep", "ja", "sure", "approve"}
@@ -65,6 +65,11 @@ def _summarize_action(name: str, args: dict, result: str = "") -> str:
     elif name == "create_event":
         title = args.get("title") or args.get("summary") or ""
         return f"Created event '{title}'"
+    elif name == "ha_call_service":
+        domain = args.get("domain", "")
+        service_name = args.get("service", "")
+        target = args.get("target", "")
+        return f"Called HA service {domain}.{service_name} on {target}"
     else:
         return f"'{name}' with {json.dumps(args)}"
 
@@ -103,7 +108,7 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
                         args = json.loads(args or "{}")
 
                     # CONFIRM-01: Intercept destructive or write action tools for confirmation
-                    if fn_name in ("create_event", "complete_task"):
+                    if fn_name in ("create_event", "complete_task", "ha_call_service"):
                         confirmed = False
                         if history:
                             # Find the last assistant message requesting confirmation
