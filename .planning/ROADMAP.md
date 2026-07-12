@@ -79,7 +79,10 @@ Plans:
 2. Core tables exist: `tasks`, `user_preferences`, `channel_identities`, `channel_verification_codes`, `queued_notifications`, `processed_telegram_updates`
 3. All migrations are additive-only — no destructive changes to existing data
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 03-01-PLAN.md — Alembic setup, initial migration from 01_schema.sql, db.py refactor to use Alembic, archive old SQL
 
 ---
 
@@ -764,7 +767,7 @@ Plans:
 |-------|-------|--------|-----------|
 | 1. CI/CD & Test Infrastructure | 0/0 | Not started | — |
 | 2. Core Agent Loop & Tool Validation | 0/1 | Not started | — |
-| 3. Database Connection & Schema Foundation | 0/0 | Not started | — |
+| 3. Database Connection & Schema Foundation | 0/1 | Not started | — |
 | 4. Task Management | 0/0 | Not started | — |
 | 5. Calendar Integration | 0/0 | Not started | — |
 | 6. Email Integration | 0/0 | Not started | — |
