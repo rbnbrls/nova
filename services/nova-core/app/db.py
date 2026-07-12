@@ -59,47 +59,16 @@ async def run_migrations():
         has_alembic = await conn.fetchval(
             "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'alembic_version')"
         )
-        if not has_alembic:
-            async def has_table(t: str) -> bool:
-                return await conn.fetchval(
-                    f"SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = '{t}')"
-                )
-            
-            async def has_column(t: str, c: str) -> bool:
-                return await conn.fetchval(
-                    f"""
-                    SELECT EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name='{t}' AND column_name='{c}'
-                    )
-                    """
-                )
-            
-            if await has_table("users"):
-                version = "0001"
-                if await has_table("processed_emails"):
-                    version = "0003"
-                if await has_table("audit_log"):
-                    version = "0004"
-                if await has_table("voice_room_defaults"):
-                    version = "0005"
-                if await has_column("memories", "scope"):
-                    version = "0006"
-                if await has_table("grocery_items"):
-                    version = "0008"
-                if await has_column("tasks", "recurrence_pattern"):
-                    version = "0010"
-                if not await has_table("processed_emails"):
-                    version = "0011"
-                
+        if has_alembic:
+            has_prefs = await conn.fetchval(
+                "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'user_preferences')"
+            )
+            if not has_prefs:
                 import logging
                 logging.getLogger("nova-core").warning(
-                    f"Alembic tracking missing but tables exist. Stamping DB to version: {version}"
+                    "Database has alembic_version but lacks user_preferences. Dropping alembic_version to rerun migrations safely."
                 )
-                
-                _dir = os.path.dirname(os.path.abspath(__file__))
-                alembic_cfg = Config(os.path.join(_dir, "..", "alembic.ini"))
-                command.stamp(alembic_cfg, version)
+                await conn.execute("DROP TABLE IF EXISTS alembic_version")
 
     _run_alembic_upgrade()
 

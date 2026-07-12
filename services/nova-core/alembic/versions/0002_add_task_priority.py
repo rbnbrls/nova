@@ -16,7 +16,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("tasks", sa.Column("priority", sa.Text(), server_default=sa.text("'medium'"), nullable=False))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = [col["name"] for col in inspector.get_columns("tasks")]
+    if "priority" not in columns:
+        op.add_column("tasks", sa.Column("priority", sa.Text(), server_default=sa.text("'medium'"), nullable=False))
 
 
 def downgrade() -> None:
