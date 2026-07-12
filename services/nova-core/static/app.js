@@ -17,6 +17,7 @@ eventSource.onmessage = function(event) {
         const data = JSON.parse(event.data);
         updateTasks(data.tasks);
         updateEvents(data.events);
+        updateAudit(data.audit);
         document.querySelector('.status-text').textContent = 'Live Connected';
         document.querySelector('.pulse-dot').style.backgroundColor = '#10b981';
     } catch (e) {
@@ -158,6 +159,42 @@ function updateEvents(events) {
     container.innerHTML = html;
 }
 
+// Render Audit Activity Feed
+function updateAudit(entries) {
+    const container = document.getElementById('audit-content');
+    const countBadge = document.getElementById('audit-count');
+
+    if (!entries || entries.length === 0) {
+        container.innerHTML = '<div class="placeholder-loader">No recent activity.</div>';
+        countBadge.textContent = '0';
+        return;
+    }
+
+    countBadge.textContent = entries.length;
+
+    let html = '<table class="audit-table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Status</th></tr></thead><tbody>';
+    entries.forEach(entry => {
+        const ts = entry.timestamp ? new Date(entry.timestamp) : new Date();
+        const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+        const statusClass = entry.status === 'denied' ? 'status-denied' : 'status-completed';
+        const statusLabel = entry.status === 'denied' ? '\u{1F6AB} Denied' : '\u2705 Done';
+        const confirmIcon = entry.confirmation_required ? '\u{1F6E1}\uFE0F ' : '';
+        html += `<tr>
+            <td class="audit-time">${timeStr}</td>
+            <td class="audit-user">${entry.user_name || 'system'}</td>
+            <td class="audit-action">${confirmIcon}${escapeHtml(entry.action_summary)}</td>
+            <td class="audit-status"><span class="${statusClass}">${statusLabel}</span></td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 // --- Preferences & Onboarding Settings ---
 let preferencesCache = {};
