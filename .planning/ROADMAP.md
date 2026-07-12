@@ -572,7 +572,10 @@ Plans:
 3. OpenObserve dashboard shows p95 latency and tool-error rate over time
 4. Alerts on quality metrics flow through ops-bridge → Forgejo issue — same path as crash alerts
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 26-01-PLAN.md — Tracer module, agent-loop instrumentation, channel propagation, alert routing config
 
 ---
 
