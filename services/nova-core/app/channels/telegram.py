@@ -269,11 +269,12 @@ async def process_incoming_telegram(payload: dict):
     try:
         pool = await get_pool()
         async with pool.acquire() as conn:
-            await conn.execute("UPDATE users SET last_inbound_at = now() WHERE name = $1", user.name)
-            await conn.execute(
-                "UPDATE user_preferences SET last_active_channel = 'telegram' WHERE user_id = (SELECT id FROM users WHERE name = $1)",
-                user.name
-            )
+            async with conn.transaction():
+                await conn.execute("UPDATE users SET last_inbound_at = now() WHERE name = $1", user.name)
+                await conn.execute(
+                    "UPDATE user_preferences SET last_active_channel = 'telegram' WHERE user_id = (SELECT id FROM users WHERE name = $1)",
+                    user.name
+                )
     except Exception as e:
         print(f"[ERROR] Failed to update last_inbound_at: {e}")
 
