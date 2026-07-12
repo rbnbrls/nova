@@ -34,7 +34,7 @@ from .db import get_pool as db_get_pool
 from .tools.calendar import _get_calendar
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, run_briefing_scheduler, process_queued_notifications
+from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, run_briefing_scheduler, process_queued_notifications, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
 
 log = logging.getLogger("nova-core")
 
@@ -52,6 +52,26 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler")
     scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications")
     scheduler.add_job(check_overdue_tasks, "interval", hours=1, id="check_overdue_tasks")
+
+    # Register maintenance jobs (Phase 29) — all gated by maintenance_enabled
+    if settings.maintenance_enabled:
+        scheduler.add_job(
+            run_maintenance_dep_scan, "cron", hour=2, minute=0,
+            id="run_maintenance_dep_scan"
+        )
+        scheduler.add_job(
+            run_maintenance_log_anomaly, "cron", hour=3, minute=0,
+            id="run_maintenance_log_anomaly"
+        )
+        scheduler.add_job(
+            run_maintenance_backup_verify, "cron", hour=4, minute=0,
+            id="run_maintenance_backup_verify"
+        )
+        scheduler.add_job(
+            run_maintenance_trend_report, "cron", day_of_week="sun", hour=5, minute=0,
+            id="run_maintenance_trend_report"
+        )
+
     scheduler.start()
 
     # Register Telegram bot command menu if enabled
@@ -178,6 +198,34 @@ async def dashboard_events() -> dict:
     return {"events": events_list}
 
 
+@app.get("/dashboard/audit")
+async def dashboard_audit(limit: int = 50) -> dict:
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, created_at, user_name, tool_name, action_summary, status, confirmation_required
+            FROM audit_log
+            WHERE created_at > now() - interval '90 days'
+            ORDER BY created_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    entries = []
+    for r in rows:
+        entries.append({
+            "id": r["id"],
+            "timestamp": r["created_at"].isoformat(),
+            "user_name": r["user_name"],
+            "tool_name": r["tool_name"],
+            "action_summary": r["action_summary"],
+            "status": r["status"],
+            "confirmation_required": r["confirmation_required"],
+        })
+    return {"audit": entries}
+
+
 @app.get("/dashboard")
 async def dashboard_redirect():
     return RedirectResponse(url="/static/index.html")
@@ -193,9 +241,11 @@ async def dashboard_stream():
             try:
                 tasks_data = await dashboard_tasks()
                 events_data = await dashboard_events()
+                audit_data = await dashboard_audit(limit=50)
                 payload = {
                     "tasks": tasks_data["tasks"],
-                    "events": events_data["events"]
+                    "events": events_data["events"],
+                    "audit": audit_data["audit"],
                 }
                 yield f"data: {json.dumps(payload)}\n\n"
             except Exception as e:

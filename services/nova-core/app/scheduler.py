@@ -6,6 +6,7 @@ import zoneinfo
 
 from .config import settings
 from .db import get_pool
+from . import maintenance
 from .channels.whatsapp import send_whatsapp_message
 from .channels.dispatcher import send_to_user
 from .tools.calendar import _get_calendar
@@ -288,3 +289,36 @@ async def process_queued_notifications():
                     await conn.execute("DELETE FROM queued_notifications WHERE id = $1", row["id"])
     except Exception as e:
         print(f"[ERROR] Error processing queued notifications: {e}")
+
+
+# ------------------------------------------------------------------
+# Scheduled Maintenance Agent (Phase 29)
+# ------------------------------------------------------------------
+
+
+async def run_maintenance_dep_scan():
+    """Nightly dependency/CVE check."""
+    if not settings.maintenance_dep_check_enabled:
+        return
+    await maintenance.dependency_scanner.run_dependency_scan()
+
+
+async def run_maintenance_log_anomaly():
+    """Nightly log-anomaly review."""
+    if not settings.maintenance_log_anomaly_enabled:
+        return
+    await maintenance.log_anomaly.run_log_anomaly_review()
+
+
+async def run_maintenance_backup_verify():
+    """Nightly backup verification."""
+    if not settings.maintenance_backup_verify_enabled:
+        return
+    await maintenance.backup_verifier.run_backup_verification()
+
+
+async def run_maintenance_trend_report():
+    """Weekly disk/VRAM trend report."""
+    if not settings.maintenance_trend_report_enabled:
+        return
+    await maintenance.trend_reporter.run_trend_report()
