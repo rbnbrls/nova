@@ -32,6 +32,7 @@ from .channels.whatsapp import process_incoming_whatsapp, send_whatsapp_otp
 from .channels.telegram import process_incoming_telegram
 from .db import get_pool as db_get_pool
 from .tools.calendar import _get_calendar
+from .voice_rooms import RoomSessionManager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, run_briefing_scheduler, process_queued_notifications, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
@@ -40,6 +41,8 @@ log = logging.getLogger("nova-core")
 
 scheduler = AsyncIOScheduler()
 
+voice_room_manager: RoomSessionManager | None = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,11 +50,23 @@ async def lifespan(app: FastAPI):
     await db.get_pool()
     await db.run_migrations()
     
+    # Initialize voice room session manager
+    pool = await db.get_pool()
+    global voice_room_manager
+    voice_room_manager = RoomSessionManager(pool, ttl_minutes=30)
+    
     # Register background jobs
     scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails")
     scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler")
     scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications")
     scheduler.add_job(check_overdue_tasks, "interval", hours=1, id="check_overdue_tasks")
+
+    # Voice room session cleanup every 5 minutes
+    if voice_room_manager is not None:
+        scheduler.add_job(
+            voice_room_manager.clear_expired, "interval", minutes=5,
+            id="voice_room_cleanup"
+        )
 
     # Register maintenance jobs (Phase 29) — all gated by maintenance_enabled
     if settings.maintenance_enabled:
