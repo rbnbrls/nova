@@ -727,4 +727,123 @@ if (btnSaveDnd) {
 // Initial fetch
 fetchPreferences();
 
+// --- Chat Section (Phase 39) ---
+let activeChatUser = 'Ruben';
+let chatInFlight = false;
+
+// Chat user selector tabs
+document.querySelectorAll('.chat-user-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.chat-user-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        activeChatUser = tab.getAttribute('data-user');
+    });
+});
+
+// Send message on button click
+document.getElementById('chat-btn-send').addEventListener('click', handleChatSubmit);
+
+// Send message on Enter key - no wrapping <form> to avoid page reload
+document.getElementById('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        handleChatSubmit();
+    }
+});
+
+async function handleChatSubmit() {
+    if (chatInFlight) return;  // Concurrent-send guard
+
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (!message) return;
+
+    chatInFlight = true;
+    input.disabled = true;
+    document.getElementById('chat-btn-send').disabled = true;
+    clearChatError();
+    showChatLoading(true);
+
+    // Store sent message before clearing input (keep on error)
+    const sentMessage = message;
+    input.value = '';
+
+    try {
+        const resp = await fetch('/dashboard/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: activeChatUser, message: sentMessage })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            updateChat(sentMessage, data.reply);
+        } else {
+            showChatError(data.detail || 'Something went wrong. Please try again.');
+        }
+    } catch (err) {
+        showChatError('Network error. Please check your connection and try again.');
+    } finally {
+        chatInFlight = false;
+        input.disabled = false;
+        document.getElementById('chat-btn-send').disabled = false;
+        showChatLoading(false);
+        input.focus();
+    }
+}
+
+function updateChat(userMessage, novaReply) {
+    const area = document.getElementById('chat-reply-area');
+    const emptyMsg = document.getElementById('chat-empty');
+    if (emptyMsg) emptyMsg.style.display = 'none';
+
+    // Single-turn: show only the last exchange
+    area.innerHTML = '';
+
+    // User message — escapeHtml() prevents XSS
+    const userDiv = document.createElement('div');
+    userDiv.className = 'chat-message user';
+    userDiv.innerHTML = '<div class="chat-message-label">You</div><div class="chat-message-text">' + escapeHtml(userMessage) + '</div>';
+    area.appendChild(userDiv);
+
+    // Nova reply — escapeHtml() prevents XSS from LLM-generated content
+    const novaDiv = document.createElement('div');
+    novaDiv.className = 'chat-message nova';
+    novaDiv.innerHTML = '<div class="chat-message-label">Nova</div><div class="chat-message-text">' + escapeHtml(novaReply) + '</div>';
+    area.appendChild(novaDiv);
+
+    // Scroll to bottom
+    area.scrollTop = area.scrollHeight;
+}
+
+function showChatLoading(visible) {
+    const area = document.getElementById('chat-reply-area');
+    const existing = document.getElementById('chat-loading-indicator');
+
+    if (visible) {
+        if (!existing) {
+            const div = document.createElement('div');
+            div.id = 'chat-loading-indicator';
+            div.className = 'chat-loading';
+            div.textContent = 'Nova is thinking...';
+            area.appendChild(div);
+            area.scrollTop = area.scrollHeight;
+        }
+    } else if (existing) {
+        existing.remove();
+    }
+}
+
+function showChatError(msg) {
+    const el = document.getElementById('chat-error');
+    if (el) {
+        el.textContent = msg;
+        el.classList.remove('hidden');
+    }
+}
+
+function clearChatError() {
+    const el = document.getElementById('chat-error');
+    if (el) el.classList.add('hidden');
+}
+
 
