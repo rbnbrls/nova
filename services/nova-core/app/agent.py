@@ -6,16 +6,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import time
 
 from datetime import datetime, timezone
 import zoneinfo
 
+log = logging.getLogger("nova-core.agent")
+
 from . import llm, tools
 from .audit import record_tool_call
 from .config import settings
 from .db import get_user_memories
+from .feedback import detect_feedback_text, feedback_context, file_feedback_issue, TurnContext  # D-01, D-02, D-03
 from .tracer import AgentTrace, emit_trace
 
 _MAX_MUTATING_TOOLS = {"add_task", "complete_task", "create_event", "ha_call_service", "remember", "forget"}
@@ -113,6 +117,17 @@ async def run_agent(
 
     if history:
         messages.extend(_truncate_history(history))
+
+    # FEEDBACK-01: Detect user-feedback text patterns and file Forgejo issue (fast-path)
+    # per D-01: early return before LLM invocation
+    if detect_feedback_text(user_message):
+        ctx = feedback_context.get(user)
+        if ctx:
+            asyncio.create_task(file_feedback_issue(user, channel, ctx, f"text: {user_message[:200]}"))
+        else:
+            log.info("Feedback detected for %s but no context cached — skipping issue", user)
+        return "Thanks for the feedback — I'll review what happened."
+
     messages.append({"role": "user", "content": user_message})
 
     specs = tools.tool_specs()
@@ -135,6 +150,19 @@ async def run_agent(
                             got_stuck=False,
                             timestamp=datetime.now(timezone.utc).isoformat(),
                         )))
+
+                    # Capture conversation context for feedback module (D-02)
+                    feedback_context.capture(user, TurnContext(
+                        user_message=user_message,
+                        agent_reply=result.message.get("content") or "",
+                        tool_calls=list(_tool_records),
+                        errors=list(_errors),
+                        iteration_count=iteration,
+                        latency_ms=_latency,
+                        channel=channel,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ))
+
                     return (result.message.get("content") or "").strip()
 
                 # Execute each requested tool and feed results back to the model.
@@ -240,5 +268,17 @@ async def run_agent(
             got_stuck=True,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )))
+
+    # Capture context for got-stuck turns too (D-02)
+    feedback_context.capture(user, TurnContext(
+        user_message=user_message,
+        agent_reply="[got stuck]",
+        tool_calls=list(_tool_records),
+        errors=list(_errors),
+        iteration_count=settings.nova_max_iterations,
+        latency_ms=_latency,
+        channel=channel,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    ))
 
     return "Sorry, I got stuck working on that — could you rephrase?"
