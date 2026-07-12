@@ -33,7 +33,9 @@ pip install --quiet \
   -r services/nova-core/requirements.txt \
   -r services/ops-bridge/requirements.txt \
   pytest \
-  pytest-asyncio
+  pytest-asyncio \
+  ruff \
+  mypy
 
 echo "Running nova-core tests..."
 PYTHONPATH="$REPO_DIR/services/nova-core" pytest services/nova-core/tests
@@ -41,4 +43,10 @@ PYTHONPATH="$REPO_DIR/services/nova-core" pytest services/nova-core/tests
 echo "Running ops-bridge tests..."
 PYTHONPATH="$REPO_DIR/services/ops-bridge" pytest services/ops-bridge/tests
 
-echo "=== All tests passed successfully! ==="
+echo "Running ruff lint..."
+ruff check services/
+
+echo "Running mypy type checking..."
+mypy services/nova-core/app/ services/ops-bridge/app.py
+
+echo "=== All tests, lint, and type checks passed successfully! ==="
