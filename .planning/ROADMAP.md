@@ -724,7 +724,7 @@ Plans:
 
 **Depends on**: Phase 9 (WhatsApp delivery for relay), Phase 20 (Telegram delivery), Phase 4 (task tooling)
 
-**Requirements**: TBD
+**Requirements**: HC-01, HC-02, HC-03
 
 **Success Criteria:**
 
@@ -733,7 +733,11 @@ Plans:
 3. Grocery list (add-by-voice, auto-dedup, "what do we need?") exists as a distinct entity
 4. A relayed message arrives on the other phone; rotating chore alternates assignee correctly
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 32-01-PLAN.md — Grocery list tools + message relay tool
+- [ ] 32-02-PLAN.md — Recurring chores with rotation and fair-share nudges
 
 ---
 
