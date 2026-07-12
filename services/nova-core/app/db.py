@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import asyncpg
 
+from alembic import command
+from alembic.config import Config
+
 from .config import settings
 
 _pool: asyncpg.Pool | None = None
@@ -22,7 +25,14 @@ async def close_pool():
         _pool = None
 
 
+def _run_alembic_upgrade():
+    alembic_cfg = Config("services/nova-core/alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+
+
 async def run_migrations():
+    _run_alembic_upgrade()
+
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
@@ -33,37 +43,6 @@ async def run_migrations():
             CREATE TABLE IF NOT EXISTS processed_emails (
                 email_id VARCHAR(255) PRIMARY KEY,
                 processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS user_preferences (
-                user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-                whatsapp_number TEXT UNIQUE,
-                dnd_enabled BOOLEAN DEFAULT FALSE,
-                dnd_start TIME DEFAULT '22:00:00',
-                dnd_end TIME DEFAULT '07:00:00',
-                morning_briefing_enabled BOOLEAN DEFAULT TRUE,
-                morning_briefing_time TIME DEFAULT '07:00:00',
-                weekly_briefing_enabled BOOLEAN DEFAULT TRUE,
-                weekly_briefing_day INTEGER DEFAULT 1,
-                weekly_briefing_time TIME DEFAULT '09:00:00',
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS whatsapp_verification_codes (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                whatsapp_number TEXT NOT NULL,
-                code TEXT NOT NULL,
-                attempts INTEGER DEFAULT 0,
-                expires_at TIMESTAMPTZ NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
             """
         )
@@ -92,93 +71,6 @@ async def run_migrations():
                             number
                         )
 
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS queued_notifications (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                whatsapp_number TEXT NOT NULL,
-                message_text TEXT NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-
-        # --- Multi-channel support (Phase 13) ---
-
-        # Add channel columns to user_preferences
-        await conn.execute(
-            "ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS last_active_channel TEXT NOT NULL DEFAULT 'whatsapp'"
-        )
-        await conn.execute(
-            "ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS channels_enabled TEXT[] NOT NULL DEFAULT '{whatsapp}'"
-        )
-
-        # Create channel_identities table
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS channel_identities (
-                id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                channel    TEXT NOT NULL,
-                channel_id TEXT NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-        await conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS channel_identities_unique_idx ON channel_identities (channel, channel_id)"
-        )
-
-        # Rename whatsapp_verification_codes → channel_verification_codes
-        await conn.execute(
-            "ALTER TABLE IF EXISTS whatsapp_verification_codes RENAME TO channel_verification_codes"
-        )
-
-        # Create channel_verification_codes for fresh installs where the old table never existed
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS channel_verification_codes (
-                id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                whatsapp_number TEXT NOT NULL,
-                code            TEXT NOT NULL,
-                channel         TEXT NOT NULL DEFAULT 'whatsapp',
-                channel_id      TEXT,
-                attempts        INTEGER DEFAULT 0,
-                expires_at      TIMESTAMPTZ NOT NULL,
-                created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-
-        # Idempotent safety net for channel/channel_id columns on channel_verification_codes
-        await conn.execute(
-            "ALTER TABLE channel_verification_codes ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'whatsapp'"
-        )
-        await conn.execute(
-            "ALTER TABLE channel_verification_codes ADD COLUMN IF NOT EXISTS channel_id TEXT"
-        )
-
-        # Add channel column to queued_notifications and make whatsapp_number nullable
-        await conn.execute(
-            "ALTER TABLE queued_notifications ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'whatsapp'"
-        )
-        await conn.execute(
-            "ALTER TABLE queued_notifications ALTER COLUMN whatsapp_number DROP NOT NULL"
-        )
-
-        # --- Telegram dedup table (Phase 14) ---
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS processed_telegram_updates (
-                update_id BIGINT PRIMARY KEY,
-                processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-
-        # Seed Telegram chat_id identities from env var
         if settings.nova_telegram_users:
             for entry in settings.nova_telegram_users.split(","):
                 entry = entry.strip()
