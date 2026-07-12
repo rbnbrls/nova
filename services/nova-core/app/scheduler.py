@@ -320,6 +320,7 @@ async def process_queued_notifications():
                 in_dnd = await is_user_in_dnd(name)
                 if not in_dnd:
                     if channel == "telegram":
+                        print(f"[DND REPLAY] Delivering queued Telegram message to {name}")
                         from .channels.telegram import adapter as telegram_adapter
                         await telegram_adapter.send_message(name, msg_text, proactive=False)
                     else:
