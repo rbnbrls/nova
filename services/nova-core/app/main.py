@@ -15,6 +15,7 @@ import hmac
 import json
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 import zoneinfo
@@ -42,6 +43,13 @@ log = logging.getLogger("nova-core")
 scheduler = AsyncIOScheduler()
 
 voice_room_manager: RoomSessionManager | None = None
+
+# WhoAmI intent detection: matches "I'm Ruben", "I am Méral", "Nova, this is Ruben", etc.
+_WHOAMI_PATTERN = re.compile(
+    r"^(?:nova,?\s+)?(?:i'?m |i am |this is |it'?s )(r(u|e)ben|m[eé]ral)$"
+    r"|^(?:nova,?\s+)?(r(u|e)ben|m[eé]ral) speaking$",
+    re.IGNORECASE
+)
 
 
 @asynccontextmanager
@@ -128,7 +136,7 @@ async def health() -> dict:
 
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
-async def chat_completions(req: ChatCompletionRequest, request: Request, user: str | None = None) -> ChatCompletionResponse:
+async def chat_completions(req: ChatCompletionRequest, request: Request, user: str | None = None, room: str | None = None) -> ChatCompletionResponse:
     """Run the agent loop for the latest user message and return the reply."""
     if settings.nova_api_token:
         import hmac
@@ -136,9 +144,30 @@ async def chat_completions(req: ChatCompletionRequest, request: Request, user: s
         if not auth.startswith("Bearer ") or not hmac.compare_digest(auth[7:], settings.nova_api_token):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-    resolved_user = user or req.user or "household"
+    resolved_room = room or req.room or "default"
     history = [m.model_dump() for m in req.messages[:-1]]
     last = req.messages[-1].content if req.messages else ""
+
+    # WhoAmI intent detection: check if the message is an identity claim
+    if last and voice_room_manager is not None:
+        m = _WHOAMI_PATTERN.match(last.strip())
+        if m:
+            claimed = (m.group(1) or m.group(3)).lower()
+            # Normalize to DB spelling
+            if claimed.startswith("m"):
+                claimed = "Meral"
+            elif claimed.startswith("r"):
+                claimed = "Ruben"
+            await voice_room_manager.set_active_user(resolved_room, claimed)
+            return ChatCompletionResponse(
+                model=req.model or settings.nova_model,
+                choices=[Choice(message=ChatMessage(role="assistant", content=f"Okay {claimed}, I will remember you for this room."))],
+            )
+
+    # Resolve user: explicit query/user param takes precedence, otherwise resolve from room
+    resolved_user = user or req.user or "household"
+    if resolved_room != "default" and resolved_user == "household" and voice_room_manager is not None:
+        resolved_user = await voice_room_manager.get_active_user(resolved_room)
 
     try:
         reply = await run_agent(last, user=resolved_user, history=history)

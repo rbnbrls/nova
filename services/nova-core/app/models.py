@@ -21,6 +21,8 @@ class ChatCompletionRequest(BaseModel):
     messages: list[ChatMessage]
     # Nova extension: which household user this conversation belongs to.
     user: str | None = None
+    # Nova extension: which voice room this request originates from.
+    room: str | None = None
 
 
 class Choice(BaseModel):
