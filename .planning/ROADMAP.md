@@ -385,11 +385,11 @@ Plans:
 3. Single turn has an overall wall-clock budget — not just iteration count
 4. Long conversations are truncated to a bounded history window before being sent to the model
 
-**Plans**: 1 plan
+**Completed**: 1/1 plan
 
 Plans:
 
-- [ ] 17-01-PLAN.md — Retry logging, configurable 120s wall-clock budget, test coverage
+- [x] 17-01-PLAN.md — Retry logging, configurable 120s wall-clock budget, test coverage
 
 ---
 
@@ -407,7 +407,10 @@ Plans:
 2. A request with a valid auth header is processed normally — legitimate channels unaffected
 3. ops-bridge compares `X-Bridge-Token` via `hmac.compare_digest` — constant time, not variable-length comparison
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 18-01-PLAN.md — Verify auth ordering, add regression-proof tests, confirm ops-bridge constant-time comparison
 
 ---
 
@@ -657,8 +660,8 @@ Plans:
 
 Plans:
 
-- [ ] 30-01-PLAN.md — Voice room defaults infrastructure: config, DB migration, RoomSessionManager with TTL
-- [ ] 30-02-PLAN.md — Room-aware voice endpoint: room param, whoami intent, tests
+- [x] 30-01-PLAN.md — Voice room defaults infrastructure: config, DB migration, RoomSessionManager with TTL
+- [x] 30-02-PLAN.md — Room-aware voice endpoint: room param, whoami intent, tests
 
 ---
 
@@ -678,7 +681,12 @@ Plans:
 4. A private memory never appears in the other user's answers or briefing
 5. Dashboard has a memory browser (view/edit/delete what Nova believes about you)
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 31-01-PLAN.md — Backend: schema, tools, agent/briefing integration
+- [ ] 31-02-PLAN.md — Dashboard memory browser API endpoints + frontend UI
+
 **UI hint**: yes
 
 ---
@@ -758,7 +766,7 @@ Plans:
 
 Plans:
 
-- [ ] 35-01-PLAN.md — HA REST API tools (ha_get_state, ha_call_service, ha_query_presence), config, confirmation gate, tests
+- [x] 35-01-PLAN.md — HA REST API tools (ha_get_state, ha_call_service, ha_query_presence), config, confirmation gate, tests
 
 ---
 
@@ -834,8 +842,8 @@ Plans:
 | 14. WhatsApp OTP Self-Service Linking | 1/1 | Complete    | 2026-07-12 |
 | 15. Per-User Dynamic Scheduling | 0/0 | Not started | — |
 | 16. Per-User Do Not Disturb | 0/0 | Not started | — |
-| 17. Reliability Hardening | 0/0 | Not started | — |
-| 18. Security Hardening | 0/0 | Not started | — |
+| 17. Reliability Hardening | 1/1 | Complete    | 2026-07-12 |
+| 18. Security Hardening | 0/1 | In progress | — |
 | 19. Channel Adapter & Multi-Channel Schema | 0/0 | Not started | — |
 | 20. Telegram Bot Foundation | 0/0 | Not started | — |
 | 21. Multi-Channel Identity & Last-Active Tracking | 0/0 | Not started | — |
@@ -847,11 +855,11 @@ Plans:
 | 27. User-Feedback → Incident Loop | 0/0 | Not started | — |
 | 28. Staging Lane & Model Upgrades | 0/0 | Not started | — |
 | 29. Scheduled Maintenance Agent | 3/3 | Complete    | 2026-07-12 |
-| 30. Speaker Identity on Voice | 0/0 | Not started | — |
+| 30. Speaker Identity on Voice | 2/2 | Complete    | 2026-07-12 |
 | 31. Per-Person Memory & Privacy Scopes | 0/0 | Not started | — |
 | 32. Household Coordination | 0/0 | Not started | — |
 | 33. Proactivity That Respects Attention | 0/0 | Not started | — |
 | 34. Deeper Email & Calendar Intelligence | 0/0 | Not started | — |
-| 35. Home Assistant as a Tool | 0/1 | Not started | — |
+| 35. Home Assistant as a Tool | 1/1 | Complete    | 2026-07-12 |
 | 36. Write-Action Audit Trail | 1/1 | Complete    | 2026-07-12 |
 | 37. Paper & Photo Intake | 1/1 | Complete    | 2026-07-12 |
