@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Nova is a private, self-hosted household assistant for Ruben & Méral. It runs on a Proxmox GPU server and is reachable by WhatsApp, voice (ESPHome satellites + iPhone via Home Assistant), and a LAN dashboard. It keeps a shared household plan — tasks, calendar, and important email from a shared Outlook mailbox — behind a single channel-agnostic agent ("Nova Core").
+Nova is a private, self-hosted household assistant for Ruben & Méral. It runs on a Proxmox GPU server and is reachable by WhatsApp, Telegram, voice (ESPHome satellites + iPhone via Home Assistant), and a LAN dashboard. Each user independently chooses their channels. It keeps a shared household plan — tasks, calendar, and important email from a shared Outlook mailbox — behind a single channel-agnostic agent ("Nova Core").
 
 ## Core Value
 
@@ -52,20 +52,20 @@ Explicitly excluded for v1 (deferred to future milestones per roadmap):
 | WhatsApp via Meta Cloud API | Reliability/ToS compliance | ✓ Wired, needs credentials |
 | Coolify for CI/CD | Git-driven deploy without managed PaaS | ✓ Implemented |
 | Track A1/A2 in v1 scope | Cheap to add now, expensive to retrofit | ✓ Complete |
-| v1.1 "User Preferences" | Implement DB-backed settings, self-linking WhatsApp OTP, dynamic briefings scheduling, and DND | ✓ Active |
+| v1.1 "User Preferences" | Implement DB-backed settings, self-linking WhatsApp OTP, dynamic briefings scheduling, and DND | ✓ Complete |
+| v2.0 "Reliability & Security" | Ollama retry/backoff, friendly fallback, wall-clock budget, chat API auth, constant-time ops-bridge token | ✓ Complete |
+| v3.0 "Multi-Channel Support" | Per-user channel choice (Telegram, WhatsApp, or both), Telegram bot, last-active push routing | ○ In Progress |
 
-## Current Milestone: v1.1 User Preferences
+## Current Milestone: v3.0 Multi-Channel Support
 
-**Goal:** Implement Postgres-backed preferences, self-service WhatsApp OTP linking, per-user scheduled briefings (morning & weekly), and per-user Do Not Disturb windows.
+**Goal:** Each household member independently chooses their channels (Telegram, WhatsApp, or both) for both chat and outbound push — with Telegram full-parity to WhatsApp and last-active-channel routing for pushes.
 
 **Target features:**
-- Postgres-backed preferences and verification codes schema (Phase 7)
-- Migration of existing statically configured numbers to the new DB store (Phase 7)
-- Dashboard-driven self-service WhatsApp linking using Meta AUTHENTICATION templates (Phase 8)
-- Dynamic scheduler job configuration (briefing toggles/times, timezone correction, dynamic rescheduling) (Phase 9)
-- Per-user quiet hours/DND windows gating proactive pushes and deferring suppressed alerts (Phase 10)
-
-**Status**: Milestone v1.1 active.
+- Telegram Bot channel with full Nova Core chat parity (agent loop, tools, identity resolution, raw-body HMAC webhook signature verification)
+- Per-user channel preferences in Postgres: Telegram-only, WhatsApp-only, or both — extending the existing preferences store
+- Last-active-channel tracking: outbound pushes route to whichever channel the user most recently messaged from
+- Telegram self-service OTP linking: dashboard sends verification code as a Telegram message, user confirms (same security model as WhatsApp Phase 8)
+- Channel-agnostic outbound push: scheduler, briefings, task reminders, and email alerts route to the correct channel per user via a push gateway
 
 ## Evolution
 
@@ -85,4 +85,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Milestone completed: 2026-07-11 (v1.0). v2.0 completed 2026-07-12. v1.1 active.*
+*Milestone completed: 2026-07-11 (v1.0). v2.0 completed 2026-07-12. v3.0 "Multi-Channel Support" started 2026-07-12.*
