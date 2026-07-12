@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     nova_max_iterations: int = 6
     # Per-turn wall-clock timeout in seconds (covers all iterations + retries)
     nova_max_turn_timeout: int = 120
+    nova_tracing_enabled: bool = True
 
     # LLM (Ollama)
     ollama_base_url: str = "http://ollama:11434"
