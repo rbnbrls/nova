@@ -127,7 +127,7 @@ async def test_webhook_authorized_number_success():
         await process_incoming_whatsapp(payload)
         
         # Verify LLM run and response sent
-        mock_agent.assert_called_once_with("What's on the calendar?", user="Ruben")
+        mock_agent.assert_called_once_with("What's on the calendar?", user="Ruben", channel="whatsapp")
         mock_send.assert_called_once_with("31612345678", "Here is your calendar...")
 
 
@@ -506,6 +506,6 @@ async def test_webhook_authorized_number_success_image_preserved():
 
         await process_incoming_whatsapp(payload)
 
-        mock_agent.assert_called_once_with("What's new?", user="Ruben")
+        mock_agent.assert_called_once_with("What's new?", user="Ruben", channel="whatsapp")
         mock_send.assert_called_once_with("31612345678", "Nothing new today.")
 

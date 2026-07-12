@@ -198,7 +198,7 @@ class TestProcessIncomingTelegram:
             mock_pool.return_value.acquire.return_value.__aenter__.return_value = mock_conn
 
             await process_incoming_telegram(_make_telegram_update(text="What's on the calendar?"))
-            mock_agent.assert_called_once_with("What's on the calendar?", user="Ruben")
+            mock_agent.assert_called_once_with("What's on the calendar?", user="Ruben", channel="telegram")
             mock_send.assert_called_once()
 
     @pytest.mark.asyncio
