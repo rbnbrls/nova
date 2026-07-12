@@ -56,39 +56,50 @@ def _run_alembic_upgrade():
 async def run_migrations():
     pool = await get_pool()
     async with pool.acquire() as conn:
-        tables = await conn.fetch(
-            "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
-        )
-        import logging
-        logging.getLogger("nova-core").warning(f"Existing tables in DB: {[t['tablename'] for t in tables]}")
-
-        has_users = await conn.fetchval(
-            "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users')"
-        )
         has_alembic = await conn.fetchval(
             "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'alembic_version')"
         )
-        if has_users and not has_alembic:
-            has_chores = await conn.fetchval(
-                "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'chores')"
-            )
-            has_recurrence = False
-            if has_chores:
-                has_recurrence = await conn.fetchval(
-                    """
+        if not has_alembic:
+            async def has_table(t: str) -> bool:
+                return await conn.fetchval(
+                    f"SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = '{t}')"
+                )
+            
+            async def has_column(t: str, c: str) -> bool:
+                return await conn.fetchval(
+                    f"""
                     SELECT EXISTS (
                         SELECT 1 FROM information_schema.columns 
-                        WHERE table_name='chores' AND column_name='recurrence_rule'
+                        WHERE table_name='{t}' AND column_name='{c}'
                     )
                     """
                 )
             
-            _dir = os.path.dirname(os.path.abspath(__file__))
-            alembic_cfg = Config(os.path.join(_dir, "..", "alembic.ini"))
-            if has_recurrence:
-                command.stamp(alembic_cfg, "head")
-            else:
-                command.stamp(alembic_cfg, "0001")
+            if await has_table("users"):
+                version = "0001"
+                if await has_table("processed_emails"):
+                    version = "0003"
+                if await has_table("audit_log"):
+                    version = "0004"
+                if await has_table("voice_room_defaults"):
+                    version = "0005"
+                if await has_column("memories", "scope"):
+                    version = "0006"
+                if await has_table("grocery_items"):
+                    version = "0008"
+                if await has_column("tasks", "recurrence_pattern"):
+                    version = "0010"
+                if not await has_table("processed_emails"):
+                    version = "0011"
+                
+                import logging
+                logging.getLogger("nova-core").warning(
+                    f"Alembic tracking missing but tables exist. Stamping DB to version: {version}"
+                )
+                
+                _dir = os.path.dirname(os.path.abspath(__file__))
+                alembic_cfg = Config(os.path.join(_dir, "..", "alembic.ini"))
+                command.stamp(alembic_cfg, version)
 
     _run_alembic_upgrade()
 
