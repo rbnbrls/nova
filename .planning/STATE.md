@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Ready to plan
-last_updated: "2026-07-12T16:07:38.395Z"
+last_updated: "2026-07-12T16:12:00.000Z"
 progress:
   total_phases: 37
-  completed_phases: 33
+  completed_phases: 34
   total_plans: 43
-  completed_plans: 39
-  percent: 89
+  completed_plans: 40
+  percent: 91
 stopped_at: null
-current_phase: 17
-current_phase_name: Phase 17 — Reliability Hardening
+current_phase: 23
+current_phase_name: Phase 23 — Telegram OTP Self-Service Linking
 current_plan: 01
 ---
 
@@ -176,6 +176,7 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 
 - Migration `0009` used instead of `0008` for WhatsApp channel_identities backfill because `0008_create_grocery_items.py` already exists (21-01)
 - Telegram OTP path also wrapped in `conn.transaction()` for consistency when moving shared `attempts = 99` update into both branches (21-01)
+- Telegram DND queuing verified correct — Phase 16 already implemented `_send_to_chat_id` to INSERT into `queued_notifications` with `channel='telegram'`; scheduler `process_queued_notifications` already replays via `telegram_adapter.send_message()` with `proactive=False` (24-01)
 
 ### Last session
 
@@ -226,12 +227,25 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Plans executed:** 1 (15-01)
 **Commits:** 1d8198d
 
-### Session 2026-07-12 (Phase 16 — Per-User Do Not Disturb)
+### Session 2026-07-12 (Phase 22 — Push Gateway Refactor)
 
-**Started:** 2026-07-12T16:04:20Z
-**Completed:** 2026-07-12T16:06:14Z
-**Plans executed:** 1 (16-01)
-**Commits:** b005650
+**Started:** 2026-07-12T16:07:35Z
+**Completed:** 2026-07-12T16:12:00Z
+**Plans executed:** 1 (22-01 — audit only, no code changes needed)
+**Commits:** (none — pure audit plan)
+
+### Session 2026-07-12 (Phase 24 — Telegram DND Queuing)
+
+**Started:** 2026-07-12T16:04:59Z
+**Completed:** 2026-07-12T16:07:00Z
+**Plans executed:** 1 (24-01)
+**Commits:** 2919299
+
+## Decisions Made
+
+- Push gateway audit confirmed all 5 scheduler call sites correctly route through dispatcher.send_to_user() or channel-appropriate routing
+- process_queued_notifications intentionally bypasses dispatcher — queued notifications must replay to the exact channel they were enqueued for
+- Both WhatsAppAdapter and TelegramAdapter expose uniform send_message(user_name, text, proactive) interface as defined by ChannelAdapter ABC
 
 ## Operator Next Steps
 

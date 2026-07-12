@@ -87,9 +87,13 @@ function updateTasks(tasks) {
                 dueHtml = `<span class="${overdueClass}">${isOverdue ? 'Overdue: ' : ''}${formattedTime}</span>`;
             }
             
+            const overdueBadge = task.overdue
+                ? `<span class="badge badge-warning">OVERDUE</span> `
+                : '';
+            
             html += `
-                <li class="todo-item">
-                    <span class="todo-title">${task.title}</span>
+                <li class="todo-item${task.overdue ? ' overdue-flag' : ''}">
+                    <span class="todo-title">${overdueBadge}${escapeHtml(task.title)}</span>
                     ${dueHtml}
                 </li>
             `;

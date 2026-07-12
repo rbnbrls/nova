@@ -517,7 +517,7 @@ Plans:
 
 Plans:
 
-- [ ] 22-01-PLAN.md — Audit scheduler call sites, verify dispatcher routing, unify channel adapter interfaces
+- [x] 22-01-PLAN.md — Audit scheduler call sites, verify dispatcher routing, unify channel adapter interfaces
 
 ---
 
@@ -562,11 +562,11 @@ Plans:
 2. Dispatcher correctly routes deferred notifications through the Telegram adapter
 3. WhatsApp-only users are unaffected by Telegram-specific DND changes
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans complete
 
 Plans:
 
-- [ ] 24-01-PLAN.md — Verify Telegram DND queue-and-replay end-to-end
+- [x] 24-01-PLAN.md — Verify Telegram DND queue-and-replay end-to-end
 
 ---
 
@@ -914,7 +914,7 @@ Plans:
 | 21. Multi-Channel Identity & Last-Active Tracking | 1/1 | Complete    | 2026-07-12 |
 | 22. Push Gateway Refactor | 0/1 | Planning ready | — |
 | 23. Telegram OTP Self-Service Linking | 1/1 | Complete    | 2026-07-12 |
-| 24. Telegram DND Queuing | 0/1 | Planning ready | — |
+| 24. Telegram DND Queuing | 1/1 | Complete   | 2026-07-12 |
 | 25. Direct Telegram OTP Routing | 0/1 | Planning ready | — |
 | 26. Agent-Run Tracing & Quality Alerts | 1/1 | Complete    | 2026-07-12 |
 | 27. User-Feedback → Incident Loop | 2/2 | Complete    | 2026-07-12 |
