@@ -19,6 +19,16 @@ def test_webhook_auth_failure():
         assert resp.status_code == 401
 
 
+def test_webhook_auth_constant_time():
+    import hmac
+    with patch("app.BRIDGE_TOKEN", "secret-token"), \
+         patch("hmac.compare_digest", wraps=hmac.compare_digest) as mock_compare:
+        resp = client.post("/webhooks/openobserve", headers={"X-Bridge-Token": "wrong-token"})
+        assert resp.status_code == 401
+        mock_compare.assert_called_once_with("wrong-token", "secret-token")
+
+
+
 @pytest.mark.asyncio
 async def test_webhook_new_issue():
     with patch("app.BRIDGE_TOKEN", "secret-token"), \
