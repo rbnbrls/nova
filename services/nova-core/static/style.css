@@ -556,6 +556,8 @@ body {
     padding: 2rem;
     min-width: 380px;
     max-width: 460px;
+    max-height: 90vh;
+    overflow-y: auto;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
 }
 

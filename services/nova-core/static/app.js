@@ -228,6 +228,13 @@ function updateSettingsUI() {
     if (linkedVal) {
         linkedVal.textContent = userPrefs.whatsapp_number ? '+' + userPrefs.whatsapp_number : 'None Linked';
     }
+
+    const telegramStatus = document.getElementById('telegram-status-val');
+    if (telegramStatus) {
+        const channels = userPrefs.channels_enabled || [];
+        telegramStatus.textContent = channels.includes('telegram') ? 'Linked' : 'Not Linked';
+        telegramStatus.style.color = channels.includes('telegram') ? 'var(--success-color)' : 'var(--text-secondary)';
+    }
     
     const morningEnabled = document.getElementById('morning-enabled');
     const morningTime = document.getElementById('morning-time');
@@ -468,6 +475,176 @@ document.getElementById('modal-btn-close-result').addEventListener('click', hide
 document.getElementById('link-modal').addEventListener('click', (e) => {
     if (e.target === document.getElementById('link-modal')) {
         hideModal();
+    }
+});
+
+// --- Telegram Linking Modal ---
+let telegramModalActiveUser = 'Ruben';
+let telegramModalState = 'start';  // 'start' | 'code' | 'result'
+
+function showTelegramModalState(state) {
+    document.getElementById('telegram-state-start').classList.add('hidden');
+    document.getElementById('telegram-state-code').classList.add('hidden');
+    document.getElementById('telegram-state-result').classList.add('hidden');
+
+    const title = document.getElementById('telegram-modal-title');
+    if (state === 'start') {
+        title.textContent = 'Link Telegram';
+        document.getElementById('telegram-state-start').classList.remove('hidden');
+    } else if (state === 'code') {
+        title.textContent = 'Verify Code';
+        document.getElementById('telegram-state-code').classList.remove('hidden');
+    } else if (state === 'result') {
+        title.textContent = 'Linking Complete';
+        document.getElementById('telegram-state-result').classList.remove('hidden');
+    }
+    telegramModalState = state;
+}
+
+function hideTelegramModal() {
+    document.getElementById('link-telegram-modal').classList.add('hidden');
+    document.getElementById('telegram-code-input').value = '';
+    clearTelegramModalErrors();
+    showTelegramModalState('start');
+}
+
+function showTelegramModalError(elementId, message) {
+    const el = document.getElementById(elementId);
+    if (el) {
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+}
+
+function clearTelegramModalErrors() {
+    ['telegram-error-msg', 'telegram-code-error-msg'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+}
+
+// Open Telegram modal button
+document.getElementById('btn-open-telegram-modal').addEventListener('click', () => {
+    telegramModalActiveUser = activeSettingsUser;
+    document.querySelectorAll('.telegram-user-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.getAttribute('data-user') === telegramModalActiveUser);
+    });
+    clearTelegramModalErrors();
+    document.getElementById('telegram-code-input').value = '';
+    showTelegramModalState('start');
+    document.getElementById('link-telegram-modal').classList.remove('hidden');
+});
+
+// Telegram modal identity tabs
+document.querySelectorAll('.telegram-user-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.telegram-user-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        telegramModalActiveUser = tab.getAttribute('data-user');
+    });
+});
+
+// Send Code button
+document.getElementById('telegram-btn-send-code').addEventListener('click', async () => {
+    clearTelegramModalErrors();
+    try {
+        const resp = await fetch('/dashboard/link-telegram/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: telegramModalActiveUser })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            document.getElementById('telegram-code-input').value = '';
+            clearTelegramModalErrors();
+            showTelegramModalState('code');
+        } else if (resp.status === 429) {
+            showTelegramModalError('telegram-error-msg', data.detail || 'Rate limit reached. Please wait 5 minutes.');
+        } else if (resp.status === 502) {
+            showTelegramModalError('telegram-error-msg', data.detail || 'Failed to send code. Please try again.');
+        } else {
+            showTelegramModalError('telegram-error-msg', data.detail || 'Failed to send code. Please try again.');
+        }
+    } catch (err) {
+        showTelegramModalError('telegram-error-msg', 'Network error. Please check your connection and try again.');
+    }
+});
+
+// Verify & Link button
+document.getElementById('telegram-btn-verify').addEventListener('click', async () => {
+    clearTelegramModalErrors();
+    const code = document.getElementById('telegram-code-input').value.trim();
+    if (!code || code.length !== 6) {
+        showTelegramModalError('telegram-code-error-msg', 'Please enter the 6-digit code');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/dashboard/link-telegram/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: telegramModalActiveUser, code: code })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            const resultMsg = document.getElementById('telegram-result-msg');
+            resultMsg.innerHTML = '✅ Successfully linked Telegram!';
+            resultMsg.className = 'modal-result-success';
+            document.getElementById('telegram-btn-retry').classList.add('hidden');
+            showTelegramModalState('result');
+            // Auto-refresh preferences to update the Telegram status display
+            fetchPreferences();
+            // Auto-close after 3 seconds
+            setTimeout(() => {
+                hideTelegramModal();
+                document.getElementById('telegram-btn-retry').classList.remove('hidden');
+            }, 3000);
+        } else {
+            showTelegramModalError('telegram-code-error-msg', data.detail || 'Incorrect or expired code');
+        }
+    } catch (err) {
+        showTelegramModalError('telegram-code-error-msg', 'Network error. Please try again.');
+    }
+});
+
+// Resend Code button
+document.getElementById('telegram-btn-resend').addEventListener('click', async () => {
+    clearTelegramModalErrors();
+    try {
+        const resp = await fetch('/dashboard/link-telegram/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: telegramModalActiveUser })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            document.getElementById('telegram-code-input').value = '';
+            clearTelegramModalErrors();
+            showTelegramModalError('telegram-code-error-msg', 'A new code has been sent.');
+        } else if (resp.status === 429) {
+            showTelegramModalError('telegram-code-error-msg', data.detail || 'Please wait before requesting a new code.');
+        } else {
+            showTelegramModalError('telegram-code-error-msg', data.detail || 'Failed to resend. Please try again.');
+        }
+    } catch (err) {
+        showTelegramModalError('telegram-code-error-msg', 'Network error. Please try again.');
+    }
+});
+
+// Try Again button (from error/result state)
+document.getElementById('telegram-btn-retry').addEventListener('click', () => {
+    clearTelegramModalErrors();
+    showTelegramModalState('start');
+});
+
+// Cancel / Close buttons
+document.getElementById('telegram-btn-cancel').addEventListener('click', hideTelegramModal);
+document.getElementById('telegram-btn-close-result').addEventListener('click', hideTelegramModal);
+
+// Click on overlay background closes modal
+document.getElementById('link-telegram-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('link-telegram-modal')) {
+        hideTelegramModal();
     }
 });
 

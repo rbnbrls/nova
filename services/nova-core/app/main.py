@@ -651,7 +651,8 @@ async def get_preferences():
             """
             SELECT u.name, up.whatsapp_number, up.dnd_enabled, up.dnd_start, up.dnd_end,
                    up.morning_briefing_enabled, up.morning_briefing_time,
-                   up.weekly_briefing_enabled, up.weekly_briefing_day, up.weekly_briefing_time
+                   up.weekly_briefing_enabled, up.weekly_briefing_day, up.weekly_briefing_time,
+                   up.channels_enabled
             FROM users u
             LEFT JOIN user_preferences up ON u.id = up.user_id
             WHERE u.name IN ('Ruben', 'Meral')
@@ -669,6 +670,7 @@ async def get_preferences():
             "weekly_enabled": r["weekly_briefing_enabled"] if r["weekly_briefing_enabled"] is not None else True,
             "weekly_day": r["weekly_briefing_day"] if r["weekly_briefing_day"] is not None else 1,
             "weekly_time": r["weekly_briefing_time"].strftime("%H:%M") if r["weekly_briefing_time"] else "09:00",
+            "channels_enabled": r["channels_enabled"] if r["channels_enabled"] is not None else [],
         }
     return prefs
 
@@ -798,39 +800,53 @@ async def verify_code(req: VerifyCodeRequest):
         if row["channel"] == "telegram":
             channel_id_val = row["channel_id"]
             if channel_id_val:
+                async with conn.transaction():
+                    await conn.execute(
+                        """
+                        INSERT INTO channel_identities (user_id, channel, channel_id)
+                        VALUES ($1, 'telegram', $2)
+                        ON CONFLICT (channel, channel_id) DO UPDATE SET channel_id = EXCLUDED.channel_id
+                        """,
+                        user_id,
+                        str(channel_id_val)
+                    )
+                    await conn.execute(
+                        """
+                        UPDATE user_preferences SET channels_enabled = ARRAY_APPEND(
+                            COALESCE(channels_enabled, '{}'),
+                            'telegram'
+                        ) WHERE user_id = $1 AND NOT ('telegram' = ANY(COALESCE(channels_enabled, '{}')))
+                        """,
+                        user_id
+                    )
+                    await conn.execute(
+                        "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
+                        row["id"]
+                    )
+        else:
+            async with conn.transaction():
+                await conn.execute(
+                    """
+                    INSERT INTO user_preferences (user_id, whatsapp_number)
+                    VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO UPDATE SET whatsapp_number = EXCLUDED.whatsapp_number
+                    """,
+                    user_id,
+                    row["whatsapp_number"]
+                )
                 await conn.execute(
                     """
                     INSERT INTO channel_identities (user_id, channel, channel_id)
-                    VALUES ($1, 'telegram', $2)
+                    VALUES ($1, 'whatsapp', $2)
                     ON CONFLICT (channel, channel_id) DO UPDATE SET channel_id = EXCLUDED.channel_id
                     """,
                     user_id,
-                    str(channel_id_val)
+                    row["whatsapp_number"]
                 )
                 await conn.execute(
-                    """
-                    UPDATE user_preferences SET channels_enabled = ARRAY_APPEND(
-                        COALESCE(channels_enabled, '{}'),
-                        'telegram'
-                    ) WHERE user_id = $1 AND NOT ('telegram' = ANY(COALESCE(channels_enabled, '{}')))
-                    """,
-                    user_id
+                    "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
+                    row["id"]
                 )
-        else:
-            await conn.execute(
-                """
-                INSERT INTO user_preferences (user_id, whatsapp_number)
-                VALUES ($1, $2)
-                ON CONFLICT (user_id) DO UPDATE SET whatsapp_number = EXCLUDED.whatsapp_number
-                """,
-                user_id,
-                row["whatsapp_number"]
-            )
-        
-        await conn.execute(
-            "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
-            row["id"]
-        )
         
     return {"status": "success", "linked_number": row["whatsapp_number"]}
 

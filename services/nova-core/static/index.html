@@ -46,7 +46,7 @@
             <!-- Bottom Preferences & Identity linking -->
             <section class="dashboard-card glass-panel settings-panel" id="preferences-panel">
                 <div class="card-header">
-                    <h2>WhatsApp Identity & Settings</h2>
+                    <h2>Identity & Settings</h2>
                 </div>
                 <div class="settings-content">
                     <div class="settings-user-selector">
@@ -62,6 +62,17 @@
                             </div>
                             <div class="input-row">
                                 <button class="btn btn-primary" id="btn-open-link-modal">Link WhatsApp</button>
+                            </div>
+                        </div>
+
+                        <div class="settings-form-group">
+                            <h3>Telegram</h3>
+                            <div class="status-container">
+                                <span class="status-label">Status:</span>
+                                <span class="status-value" id="telegram-status-val">Checking...</span>
+                            </div>
+                            <div class="input-row">
+                                <button class="btn btn-primary" id="btn-open-telegram-modal">Link Telegram</button>
                             </div>
                         </div>
 
@@ -171,6 +182,48 @@
                         <div class="modal-actions">
                             <button class="btn btn-primary" id="modal-btn-retry">Try Again</button>
                             <button class="btn btn-secondary" id="modal-btn-close-result">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Telegram Linking Modal -->
+        <div id="link-telegram-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="telegram-modal-title">Link Telegram</h3>
+                </div>
+                <div id="telegram-modal-body">
+                    <!-- State 1: Identity selection & send code -->
+                    <div id="telegram-state-start">
+                        <p>Send a verification code to your Telegram account.</p>
+                        <div class="modal-user-selector">
+                            <button class="modal-user-tab telegram-user-tab active" data-user="Ruben">Ruben</button>
+                            <button class="modal-user-tab telegram-user-tab" data-user="Meral">Méral</button>
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn btn-primary" id="telegram-btn-send-code">Send Code via Telegram</button>
+                            <button class="btn btn-secondary" id="telegram-btn-cancel">Cancel</button>
+                        </div>
+                        <div class="modal-error hidden" id="telegram-error-msg"></div>
+                    </div>
+                    <!-- State 2: Code entry -->
+                    <div id="telegram-state-code" class="hidden">
+                        <p>A 6-digit code was sent to your Telegram account.</p>
+                        <input type="text" id="telegram-code-input" placeholder="6-digit code" maxlength="6" />
+                        <div class="modal-actions">
+                            <button class="btn btn-success" id="telegram-btn-verify">Verify &amp; Link</button>
+                            <button class="btn btn-secondary" id="telegram-btn-resend">Resend Code</button>
+                        </div>
+                        <div class="modal-error hidden" id="telegram-code-error-msg"></div>
+                    </div>
+                    <!-- State 3: Result -->
+                    <div id="telegram-state-result" class="hidden">
+                        <p id="telegram-result-msg"></p>
+                        <div class="modal-actions">
+                            <button class="btn btn-primary" id="telegram-btn-retry">Try Again</button>
+                            <button class="btn btn-secondary" id="telegram-btn-close-result">Close</button>
                         </div>
                     </div>
                 </div>
