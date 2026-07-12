@@ -49,6 +49,18 @@ class Settings(BaseSettings):
     telegram_enabled: bool = False
     nova_telegram_users: str = ""
 
+    # Scheduled Maintenance Agent (Phase 29)
+    forgejo_url: str = "https://git.7rb.nl"
+    forgejo_repo: str = "ruben/nova"
+    forgejo_token: str = ""
+    maintenance_enabled: bool = True
+    maintenance_dep_check_enabled: bool = True
+    maintenance_log_anomaly_enabled: bool = True
+    maintenance_backup_verify_enabled: bool = True
+    maintenance_trend_report_enabled: bool = True
+    backup_dump_dir: str = "/backups/postgres"
+    backup_dump_pattern: str = "nova-*.sql"
+
     @property
     def database_url(self) -> str:
         return (
