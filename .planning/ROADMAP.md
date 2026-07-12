@@ -34,6 +34,14 @@ the `user` field, and a constant-time ops-bridge token compare). Deliberately ex
 v2.0: robustness polish, infra reproducibility (`:latest` pins), and server-side cross-channel
 memory (a feature, not a fix) — these stay in the backlog.
 
+**Milestone v3.0 "Multi-Channel Support"** (Phases 13-17) adds Telegram as a second messaging
+channel alongside WhatsApp. Each household member independently chooses their channels (Telegram,
+WhatsApp, or both) for both chat and outbound push. The milestone introduces a channel-agnostic
+adapter pattern, a Telegram bot with full Nova Core chat parity, last-active-channel routing for
+proactive pushes, and a Telegram OTP self-service linking flow. All new Telegram behavior is gated
+behind a `NOVA_TELEGRAM_ENABLED` feature flag (default OFF) so WhatsApp-only mode remains safe
+during rollout. Existing WhatsApp tests serve as the regression safety net across all phases.
+
 ## Phases
 
 **Phase Numbering:**
@@ -55,6 +63,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 10: Per-User Do Not Disturb** - Per-user DND windows suppress/defer proactive pushes without ever touching inbound chat (completed 2026-07-12)
 - [x] **Phase 11: Reliability Hardening** - Chat path survives transient Ollama failures, slow/looping turns, and long conversations — friendly fallback instead of a raw 500, never an unbounded request
 - [x] **Phase 12: Security Hardening** - The chat API verifies callers before trusting user attribution, and ops-bridge checks its token in constant time
+- [ ] **Phase 13: Foundation — DB Schema & Channel Adapter Skeleton** - Additive DB migrations for multi-channel support; WhatsApp refactored into `channels/whatsapp.py` conforming to `ChannelAdapter` interface
+- [ ] **Phase 14: Telegram Bot Foundation** - Telegram bot with full inbound→agent→outbound chat loop, webhook security, command menu, HTML formatting, and message chunking
+- [ ] **Phase 15: Multi-Channel Identity & Last-Active Tracking** - Both inbound channels update `last_active_channel` atomically; identity resolution via `channel_identities` table
+- [ ] **Phase 16: Push Gateway Refactor** - All 5 scheduler call sites route through `dispatcher.send_to_user()` based on last-active channel; DND queue uses dispatcher pattern
+- [ ] **Phase 17: Telegram OTP Self-Service Linking** - Users link their Telegram account via dashboard-initiated, Telegram-delivered verification codes
 
 ## Phase Details
 
@@ -228,10 +241,91 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Plans**: TBD
 
+### Phase 13: Foundation — DB Schema & Channel Adapter Skeleton
+
+**Goal**: Database schema supports multi-channel preferences and identities; WhatsApp adapter conforms to a shared `ChannelAdapter` interface
+**Depends on**: Phase 12 (completed security hardening)
+**Requirements**: CHAN-01, CHAN-02
+**Success Criteria** (what must be TRUE):
+
+   1. `user_preferences` has `last_active_channel TEXT DEFAULT 'whatsapp'` and `channels_enabled TEXT[] DEFAULT '{whatsapp}'` columns — both additive-only
+   2. `channel_identities` table (`user_id`, `channel`, `channel_id`) exists with `UNIQUE(channel, channel_id)` constraint
+   3. `whatsapp_verification_codes` renamed to `channel_verification_codes` with added `channel TEXT DEFAULT 'whatsapp'` and `channel_id TEXT` columns; existing data preserved
+   4. `queued_notifications` has `channel` column and `whatsapp_number` is nullable
+   5. WhatsApp adapter (`channels/whatsapp.py`) conforms to `ChannelAdapter` interface and all existing WhatsApp tests pass unchanged
+   6. `channels/` package exists with `__init__.py` (`ChannelAdapter` ABC + `InboundMessage` dataclass), `dispatcher.py` skeleton, `webhook_router.py` skeleton
+
+**Plans**: 3 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — DB Schema Migrations (additive-only columns, channel_identities, table rename, queued_notifications changes)
+- [x] 13-02-PLAN.md — Channel Adapter Package (ChannelAdapter ABC, InboundMessage, skeleton dispatcher/router/identity)
+- [ ] 13-03-PLAN.md — WhatsApp Adapter Refactor (WhatsAppAdapter class, compat shim, import updates)
+
+### Phase 14: Telegram Bot Foundation
+
+**Goal**: Users can chat with Nova via Telegram with full agent-loop parity, including webhook security, formatting, and command menu
+**Depends on**: Phase 13 (channel adapter skeleton, webhook router)
+**Requirements**: TGBOT-01, TGBOT-02, TGBOT-03, TGBOT-04, CMD-01, CMD-02, TGFORMAT-01, TGFORMAT-02, PUSH-03
+**Success Criteria** (what must be TRUE):
+
+  1. User can message Nova via Telegram and receive a reply (full agent-loop parity with WhatsApp) — inbound→agent→outbound loop verified end-to-end
+  2. `POST /webhooks/telegram` endpoint verifies `X-Telegram-Bot-Api-Secret-Token` with constant-time comparison; invalid tokens return HTTP 401
+  3. `processed_telegram_updates` dedup table with `update_id` as PK prevents duplicate agent executions on webhook retries — returns HTTP 200 immediately, processes in background task
+  4. Bot registers `/help`, `/tasks`, `/settings` command menu via `setMyCommands`; `/help` returns a text summary of Nova's capabilities
+  5. Outbound Telegram messages use HTML parse mode; messages exceeding 4096 characters are chunked at paragraph boundaries with 1-second inter-chunk delays
+  6. `NOVA_TELEGRAM_ENABLED` feature flag (default OFF) gates all new Telegram behavior; when OFF, WhatsApp-only mode remains fully functional
+
+**Plans**: TBD
+
+### Phase 15: Multi-Channel Identity & Last-Active Tracking
+
+**Goal**: Both inbound channels update last-active tracking atomically; identity resolution works across all channels via `channel_identities`
+**Depends on**: Phase 14 (Telegram bot exists, both channels active)
+**Requirements**: CHAN-03
+**Success Criteria** (what must be TRUE):
+
+  1. Both WhatsApp and Telegram inbound handlers update `last_active_channel` on `user_preferences` atomically on every user message (piggybacking on existing `last_inbound_at` update)
+  2. `channels/identity.py` resolves `(channel, channel_id)` → user_name using `channel_identities` table; replaces legacy `identity.py` WhatsApp-only functions
+  3. Existing WhatsApp identity resolution continues to work through the new multi-channel resolver — no regression for WhatsApp sender-to-user attribution
+  4. Telegram's BIGINT `chat_id` is stored losslessly as TEXT in `channel_identities.channel_id`
+
+**Plans**: TBD
+
+### Phase 16: Push Gateway Refactor
+
+**Goal**: All outbound proactive pushes route to the user's last-active channel through a dispatcher, not hardcoded to WhatsApp
+**Depends on**: Phase 15 (identity resolution + last-active tracking must be solid)
+**Requirements**: PUSH-01, PUSH-02
+**Success Criteria** (what must be TRUE):
+
+  1. Morning briefing, weekly briefing, task reminders, and email alerts route through `dispatcher.send_to_user(user_name, text)` — all 5 scheduler call sites refactored from hardcoded `send_whatsapp_message()`
+  2. DND-deferred messages queue via the dispatcher pattern and deliver to the correct channel when DND window ends (moved from `whatsapp.py` to `dispatcher.py`)
+  3. WhatsApp fallback chain: if Telegram is the user's last-active channel but no Telegram identity exists in `channel_identities`, falls back to WhatsApp — no silent failures
+  4. All existing WhatsApp tests pass after refactor — the regression safety net holds across all 5 refactored call sites
+
+**Plans**: TBD
+
+### Phase 17: Telegram OTP Self-Service Linking
+
+**Goal**: Users link their Telegram account through the dashboard with OTP verification, using the generalized `channel_verification_codes` table
+**Depends on**: Phase 14 (working Telegram bot to deliver OTP), Phase 15 (multi-channel identity system to write linked chat_id)
+**Requirements**: TGOTP-01, TGOTP-02, TGOTP-03, TGOTP-04
+**Success Criteria** (what must be TRUE):
+
+  1. User initiates Telegram linking from the dashboard by selecting their household identity (Ruben or Méral)
+  2. Dashboard sends a verification code as a Telegram message (via dispatcher); user confirms the code on the dashboard
+  3. Verification codes are single-use (consumed after correct verification), time-limited (expire after TTL), rate-limited (max N attempts), and reject already-linked `chat_id` values
+  4. A user with an existing linked Telegram account can re-link/replace with a new `chat_id` through the same flow
+  5. The flow writes to `channel_identities` (channel='telegram', channel_id=chat_id) and updates `user_preferences.channels_enabled` to include 'telegram'
+
+**Plans**: TBD
+**UI hint**: yes
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -247,3 +341,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 10. Per-User Do Not Disturb | 1/1 | Complete | 2026-07-12 |
 | 11. Reliability Hardening | 1/1 | Complete | 2026-07-12 |
 | 12. Security Hardening | 1/1 | Complete | 2026-07-12 |
+| 13. Foundation — DB Schema & Channel Adapter Skeleton | 2/3 | In Progress | 2026-07-12 |
+| 14. Telegram Bot Foundation | 0/0 | Not started | - |
+| 15. Multi-Channel Identity & Last-Active Tracking | 0/0 | Not started | - |
+| 16. Push Gateway Refactor | 0/0 | Not started | - |
+| 17. Telegram OTP Self-Service Linking | 0/0 | Not started | - |
