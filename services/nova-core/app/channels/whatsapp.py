@@ -175,7 +175,7 @@ async def process_incoming_whatsapp(payload: dict):
     clean_sender = sender.lstrip("+")
     user = await identity.user_from_whatsapp(clean_sender)
     if user == identity.HOUSEHOLD:
-        await _send_to_number(sender, "Sorry, you are not authorized to use this household assistant.", proactive=False, user_name="household")
+        await send_whatsapp_message(sender, "Sorry, you are not authorized to use this household assistant.")
         return
 
     try:
@@ -186,7 +186,7 @@ async def process_incoming_whatsapp(payload: dict):
         print(f"[ERROR] Failed to update last_inbound_at: {e}")
 
     reply = await run_agent(text, user=user.name)
-    await _send_to_number(sender, reply, proactive=False, user_name=user.name)
+    await send_whatsapp_message(sender, reply)
 
 
 adapter = WhatsAppAdapter()
