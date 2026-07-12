@@ -6,6 +6,7 @@ for backward compatibility with scheduler and existing test patches.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -16,8 +17,40 @@ import httpx
 from ..agent import run_agent
 from ..config import settings
 from ..db import get_pool
+from ..feedback import detect_feedback_reaction, feedback_context, file_feedback_issue  # D-01, D-02, D-03
 from ..identity import user_from_whatsapp
 from . import ChannelAdapter, InboundMessage
+
+
+def _parse_reaction(payload: dict) -> dict | None:
+    """Extract reaction info from a WhatsApp webhook payload.
+
+    Returns dict with keys {from, message_id, emoji, channel} or None
+    if the payload is not a reaction message.
+
+    Per D-01: reactions are detected before normal message processing.
+    """
+    try:
+        entry = payload.get("entry", [])[0]
+        change = entry.get("changes", [])[0]
+        value = change.get("value", {})
+        messages = value.get("messages", [])
+        if not messages:
+            return None
+        msg = messages[0]
+        if msg.get("type") != "reaction":
+            return None
+        reaction = msg.get("reaction", {})
+        if not reaction.get("emoji"):
+            return None
+        return {
+            "from": msg.get("from", "").lstrip("+"),
+            "message_id": reaction.get("message_id", ""),
+            "emoji": reaction.get("emoji", ""),
+            "channel": "whatsapp",
+        }
+    except (IndexError, KeyError, TypeError):
+        return None
 
 
 class WhatsAppAdapter(ChannelAdapter):
@@ -269,7 +302,26 @@ async def process_incoming_whatsapp(payload: dict):
     Handles both text and image messages. Image messages are downloaded from Meta,
     analyzed via the local vision model, and the extraction context is piped into
     the agent as a synthetic user message.
+
+    Also handles WhatsApp reaction messages (👎) — files a feedback issue
+    without running the agent loop.
     """
+    # FEEDBACK-01: Detect WhatsApp reactions before normal message processing
+    # per D-01: thumbs-down reaction triggers feedback issue filing
+    reaction_info = _parse_reaction(payload)
+    if reaction_info is not None:
+        if detect_feedback_reaction(reaction_info["emoji"]):
+            sender = reaction_info["from"]
+            from .. import identity
+            user = await identity.user_from_whatsapp(sender)
+            if user.name != "household":
+                ctx = feedback_context.get(user.name)
+                trigger = f"reaction: 👎 on message {reaction_info['message_id'][:20]}"
+                asyncio.create_task(file_feedback_issue(user.name, "whatsapp", ctx, trigger))
+            else:
+                print(f"[FEEDBACK] Reaction from unrecognized sender {sender} — skipped")
+        return
+
     # Use the adapter to parse the payload (handles both text and image)
     adapter = WhatsAppAdapter()
     inbound = await adapter.process_incoming(payload)
