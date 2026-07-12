@@ -12,12 +12,17 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
+# Runtime imports used by register_webhooks (imported at module level so FastAPI
+# can resolve type annotations even with `from __future__ import annotations`)
+from fastapi import Request, BackgroundTasks, HTTPException
+
 import httpx
 
 from ..agent import run_agent
 from ..config import settings
 from ..db import get_pool
 from ..identity import user_from_telegram, is_user_in_dnd, User, HOUSEHOLD
+from ..security import verify_telegram_signature
 from . import ChannelAdapter, InboundMessage
 
 
@@ -70,16 +75,89 @@ def _chunk_message(text: str, max_length: int = 4096) -> list[str]:
     return chunks
 
 
+def _handle_telegram_command(text: str) -> str:
+    """Handle Telegram bot commands. Returns the reply text.
+
+    Moved from main.py in Phase 20.
+    """
+    cmd = text.split()[0].lower()
+    if cmd == "/help":
+        return (
+            "\U0001f916 I'm Nova, your household assistant.\n\n"
+            "I can help with:\n"
+            "\U0001f4cb Tasks — add, list, complete household tasks\n"
+            "\U0001f4c5 Calendar — check your schedule and events\n"
+            "\U0001f4e8 Email — get important email notifications\n"
+            "\u23f0 Briefings — morning and weekly summaries\n\n"
+            "Just ask me anything! For example:\n"
+            '• "What\'s on my calendar today?"\n'
+            '• "Add milk to the shopping list"\n'
+            '• "What tasks are overdue?"\n\n'
+            "Commands:\n"
+            "/help — Show this message\n"
+            "/tasks — Show your current tasks\n"
+            "/settings — Manage your preferences"
+        )
+    elif cmd == "/tasks":
+        return "Task management coming soon. Try asking 'What are my tasks?' in the meantime."
+    elif cmd == "/settings":
+        return "Preferences management coming soon. Use the web dashboard to adjust your settings."
+    return f"Unknown command: {cmd}. Try /help."
+
+
 class TelegramAdapter(ChannelAdapter):
     """Telegram channel via Bot API."""
 
     async def register_webhooks(self, app: FastAPI) -> None:
-        """Register webhook routes on the FastAPI application.
+        """Register POST /webhooks/telegram on the FastAPI app (migrated from main.py in Phase 20).
 
-        Webhook routes are registered in main.py at /webhooks/telegram.
-        Route migration to adapter method deferred to Phase 20.
+        The inner handler is uniquely named to avoid FastAPI route name collisions
+        when register_webhooks is called, and uses name='telegram_webhook' on the
+        route decorator for the same reason.
         """
-        pass
+        import json
+
+        @app.post("/webhooks/telegram", name="telegram_webhook")
+        async def telegram_webhook_handler(request: Request, background_tasks: BackgroundTasks) -> dict:
+            if not settings.nova_telegram_enabled:
+                raise HTTPException(status_code=404, detail="Telegram channel is not enabled")
+
+            body = await request.body()
+            secret_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+
+            if not verify_telegram_signature(secret_token, settings.telegram_webhook_secret):
+                raise HTTPException(status_code=401, detail="Invalid secret token")
+
+            try:
+                payload = json.loads(body)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+            update = payload if isinstance(payload, dict) else {}
+            msg = update.get("message", {})
+            text = msg.get("text", "")
+            chat = msg.get("chat", {})
+            chat_id = str(chat.get("id", ""))
+
+            if text and chat_id:
+                update_id = update.get("update_id")
+                if update_id is not None:
+                    pool = await get_pool()
+                    async with pool.acquire() as conn:
+                        result = await conn.execute(
+                            "INSERT INTO processed_telegram_updates (update_id) VALUES ($1) ON CONFLICT (update_id) DO NOTHING",
+                            update_id
+                        )
+                        if result != "INSERT 0 1":
+                            return {"status": "accepted"}
+
+                if text.startswith("/"):
+                    reply = _handle_telegram_command(text)
+                    background_tasks.add_task(send_telegram_message, chat_id, reply)
+                else:
+                    background_tasks.add_task(process_incoming_telegram, payload)
+
+            return {"status": "accepted"}
 
     async def send_message(self, user_name: str, text: str, proactive: bool = False) -> None:
         """ChannelAdapter.send_message: resolve user_name to chat_id, then send."""

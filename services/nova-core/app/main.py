@@ -30,7 +30,8 @@ from .config import settings
 from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest, LinkWhatsAppStartRequest, LinkWhatsAppVerifyRequest
 from .security import verify_whatsapp_signature, verify_telegram_signature
 from .channels.whatsapp import process_incoming_whatsapp, send_whatsapp_otp
-from .channels.telegram import process_incoming_telegram
+from .channels.telegram import process_incoming_telegram, _handle_telegram_command
+from .channels.webhook_router import register_all_webhooks
 from .db import get_pool as db_get_pool
 from .tools.calendar import _get_calendar
 from .voice_rooms import RoomSessionManager
@@ -128,6 +129,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Nova Core", version="0.1.0", lifespan=lifespan)
 
+# Register channel webhook routes via adapter pattern
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    # No running event loop — safe to run_until_complete at module load
+    asyncio.run(register_all_webhooks(app))
 
 
 @app.get("/health")
@@ -484,50 +491,6 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks) 
     return {"status": "accepted"}
 
 
-@app.post("/webhooks/telegram")
-async def telegram_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
-    if not settings.nova_telegram_enabled:
-        raise HTTPException(status_code=404, detail="Telegram channel is not enabled")
-
-    body = await request.body()
-    secret_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
-
-    if not verify_telegram_signature(secret_token, settings.telegram_webhook_secret):
-        raise HTTPException(status_code=401, detail="Invalid secret token")
-
-    try:
-        payload = json.loads(body)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    update = payload if isinstance(payload, dict) else {}
-    msg = update.get("message", {})
-    text = msg.get("text", "")
-    chat = msg.get("chat", {})
-    chat_id = str(chat.get("id", ""))
-
-    if text and chat_id:
-        update_id = update.get("update_id")
-        if update_id is not None:
-            pool = await db_get_pool()
-            async with pool.acquire() as conn:
-                result = await conn.execute(
-                    "INSERT INTO processed_telegram_updates (update_id) VALUES ($1) ON CONFLICT (update_id) DO NOTHING",
-                    update_id
-                )
-                if result != "INSERT 0 1":
-                    return {"status": "accepted"}
-
-        if text.startswith("/"):
-            from .channels.telegram import send_telegram_message
-            reply = _handle_telegram_command(text)
-            background_tasks.add_task(send_telegram_message, chat_id, reply)
-        else:
-            background_tasks.add_task(process_incoming_telegram, payload)
-
-    return {"status": "accepted"}
-
-
 @app.get("/api/preferences")
 async def get_preferences():
     pool = await db.get_pool()
@@ -796,33 +759,6 @@ async def save_dnd_preferences(req: DNDSettingsRequest):
         )
         
     return {"status": "success"}
-
-
-def _handle_telegram_command(text: str) -> str:
-    """Handle Telegram bot commands. Returns the reply text."""
-    cmd = text.split()[0].lower()
-    if cmd == "/help":
-        return (
-            "\U0001f916 I'm Nova, your household assistant.\n\n"
-            "I can help with:\n"
-            "\U0001f4cb Tasks — add, list, complete household tasks\n"
-            "\U0001f4c5 Calendar — check your schedule and events\n"
-            "\U0001f4e8 Email — get important email notifications\n"
-            "\u23f0 Briefings — morning and weekly summaries\n\n"
-            "Just ask me anything! For example:\n"
-            '• "What\'s on my calendar today?"\n'
-            '• "Add milk to the shopping list"\n'
-            '• "What tasks are overdue?"\n\n'
-            "Commands:\n"
-            "/help — Show this message\n"
-            "/tasks — Show your current tasks\n"
-            "/settings — Manage your preferences"
-        )
-    elif cmd == "/tasks":
-        return "Task management coming soon. Try asking 'What are my tasks?' in the meantime."
-    elif cmd == "/settings":
-        return "Preferences management coming soon. Use the web dashboard to adjust your settings."
-    return f"Unknown command: {cmd}. Try /help."
 
 
 import os
