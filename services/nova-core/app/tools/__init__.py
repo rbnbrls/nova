@@ -7,7 +7,7 @@ definition. Phase 5 replaces the stub implementations with real integrations.
 from __future__ import annotations
 
 from .base import TOOLS, Tool, tool  # noqa: F401
-from . import tasks, calendar, email, home_assistant, memory, groceries, relay  # noqa: F401  (import registers the tools)
+from . import tasks, calendar, email, home_assistant, memory, groceries, relay, chores  # noqa: F401  (import registers the tools)
 
 
 def tool_specs() -> list[dict]:
