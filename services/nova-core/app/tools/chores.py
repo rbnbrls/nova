@@ -180,7 +180,7 @@ async def _compute_fairness_nudge(conn, rotation_group: str) -> list[str]:
         max_count = max(counts.values())
         min_count = min(counts.values())
         if max_count - min_count >= 2:
-            details = ", ".join(f"{name} has done this {count}x" for name, count in rows)
+            details = ", ".join(f"{r['name']} has done this {r['count']}x" for r in rows)
             return [f"   ⚖️ Fair-share: {details} this month."]
 
     return []

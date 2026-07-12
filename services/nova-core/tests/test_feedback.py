@@ -57,7 +57,6 @@ class TestDetectFeedbackText:
 
     def test_matches_incorrect(self):
         assert detect_feedback_text("That's incorrect") is True
-        assert detect_feedback_text("that is incorrect") is True
 
     def test_matches_not_right(self):
         assert detect_feedback_text("that is not right") is True

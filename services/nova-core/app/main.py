@@ -605,6 +605,14 @@ async def link_telegram_verify(req: LinkTelegramVerifyRequest):
             user_id,
         )
 
+        # 5.5. Record channel identity (idempotent — handles re-linking)
+        await conn.execute(
+            """INSERT INTO channel_identities (user_id, channel, channel_id)
+               VALUES ($1, 'telegram', $2)
+               ON CONFLICT (channel, channel_id) DO UPDATE SET user_id = EXCLUDED.user_id""",
+            user_id, row["whatsapp_number"],
+        )
+
         # 6. Mark code as consumed
         await conn.execute(
             "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
