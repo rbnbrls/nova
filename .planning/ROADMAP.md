@@ -526,8 +526,11 @@ Plans:
 4. Existing linked user can re-link/replace with a new chat_id through the same flow
 5. Flow writes to `channel_identities` and updates `channels_enabled` to include 'telegram'
 
-**Plans**: TBD
+**Plans**: 1 plan
 **UI hint**: yes
+
+Plans:
+- [ ] 23-01-PLAN.md — Telegram OTP self-service linking (send_telegram_otp, API endpoints, dashboard modal)
 
 ---
 
@@ -879,7 +882,7 @@ Plans:
 | 20. Telegram Bot Foundation | 1/1 | Complete    | 2026-07-12 |
 | 21. Multi-Channel Identity & Last-Active Tracking | 0/0 | Not started | — |
 | 22. Push Gateway Refactor | 0/0 | Not started | — |
-| 23. Telegram OTP Self-Service Linking | 0/0 | Not started | — |
+| 23. Telegram OTP Self-Service Linking | 0/1 | In progress  | 2026-07-12 |
 | 24. Telegram DND Queuing | 0/0 | Not started | — |
 | 25. Direct Telegram OTP Routing | 0/0 | Not started | — |
 | 26. Agent-Run Tracing & Quality Alerts | 1/1 | Complete    | 2026-07-12 |
