@@ -1,10 +1,12 @@
-"""Email tool using MS Graph API with hybrid rule+LLM importance classification."""
+"""Email tool using IMAP/SMTP with hybrid rule+LLM importance classification."""
 from __future__ import annotations
 
 import json
 import re
+from email.message import EmailMessage
 
-import httpx
+import aiosmtplib
+from aioimaplib import aioimaplib
 
 from .base import tool
 from ..config import settings
@@ -18,24 +20,156 @@ IMPORTANT_KEYWORDS = [
 ]
 
 
-async def _get_access_token() -> str | None:
-    if not all([settings.azure_tenant_id, settings.azure_client_id, settings.azure_client_secret]):
-        return None
-        
-    url = f"https://login.microsoftonline.com/{settings.azure_tenant_id}/oauth2/v2.0/token"
-    data = {
-        "client_id": settings.azure_client_id,
-        "scope": "https://graph.microsoft.com/.default",
-        "client_secret": settings.azure_client_secret,
-        "grant_type": "client_credentials"
-    }
-    
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(url, data=data)
-        if resp.status_code == 200:
-            return resp.json().get("access_token")
-    return None
+# ---------------------------------------------------------------------------
+# IMAP helpers
+# ---------------------------------------------------------------------------
 
+async def _get_imap_connection():
+    """Create and return a connected aioimaplib.IMAP4_SSL client.
+
+    Returns None if no IMAP host is configured (mock fallback gate).
+    """
+    if not settings.nova_imap_host:
+        return None
+    imap = aioimaplib.IMAP4_SSL(
+        host=settings.nova_imap_host,
+        port=settings.nova_imap_port,
+    )
+    await imap.wait_hello_from_server()
+    await imap.login(settings.nova_imap_user, settings.nova_imap_pass)
+    return imap
+
+
+def _parse_header(msg_data: list, header_name: str) -> str:
+    """Extract a header value from IMAP fetch response bytes."""
+    header_key = header_name.lower() + ":"
+    for item in msg_data:
+        if isinstance(item, bytes):
+            text = item.decode("utf-8", errors="replace")
+            for line in text.split("\r\n"):
+                if line.lower().startswith(header_key):
+                    return line[len(header_key):].strip()
+        elif isinstance(item, tuple):
+            # Nested tuple from aioimaplib response
+            for sub_item in item:
+                if isinstance(sub_item, bytes):
+                    text = sub_item.decode("utf-8", errors="replace")
+                    for line in text.split("\r\n"):
+                        if line.lower().startswith(header_key):
+                            return line[len(header_key):].strip()
+    return ""
+
+
+def _parse_flags(msg_data: list) -> list[str]:
+    """Extract flag list from IMAP fetch response."""
+    for item in msg_data:
+        if isinstance(item, (bytes, str)):
+            text = item.decode("utf-8", errors="replace") if isinstance(item, bytes) else item
+            # Flags look like: ... FLAGS (\Seen \Flagged) ...
+            if "FLAGS" in text:
+                match = re.search(r"FLAGS\s*\(([^)]*)\)", text)
+                if match:
+                    return match.group(1).split()
+        elif isinstance(item, tuple):
+            for sub_item in item:
+                if isinstance(sub_item, bytes):
+                    text = sub_item.decode("utf-8", errors="replace")
+                    if "FLAGS" in text:
+                        match = re.search(r"FLAGS\s*\(([^)]*)\)", text)
+                        if match:
+                            return match.group(1).split()
+    return []
+
+
+async def fetch_emails_imap(limit: int = 10, unread_only: bool = False) -> list[dict]:
+    """Fetch emails via IMAP. Returns list of dicts with {id, subject, from, preview, unread}.
+
+    Uses UID-based operations (never message sequence numbers).
+    Falls back to mock data when no IMAP host is configured.
+    """
+    imap = await _get_imap_connection()
+
+    # Mock data fallback when IMAP is not configured
+    if imap is None:
+        return [
+            {"id": "msg_1", "subject": "School update: upcoming holidays", "from": "school@edu.nl", "preview": "Dear parents, please note that summer holidays start next week.", "unread": True},
+            {"id": "msg_2", "subject": "Radiale CalDAV Server Update", "from": "admin@local.lan", "preview": "The local radicale container has updated successfully.", "unread": False},
+            {"id": "msg_3", "subject": "Factuur July 2026", "from": "billing@energy.nl", "preview": "Your monthly energy invoice is ready for download.", "unread": True},
+            {"id": "msg_4", "subject": "Spam Offer: Cheap vacations", "from": "spam@deals.com", "preview": "Click here to win a free trip to Hawaii!", "unread": True}
+        ]
+
+    try:
+        await imap.select("INBOX")
+
+        # Search criteria: UNSEEN for unread_only, otherwise UNKEYWORD NovaProcessed
+        # (IMAP drops the $ prefix in KEYWORD/UNKEYWORD)
+        if unread_only:
+            criteria = "UNSEEN"
+        else:
+            criteria = "UNKEYWORD NovaProcessed"
+
+        result, uid_data = await imap.uid("search", None, criteria)
+        # uid_data is [b'1 2 3'] — decode and split
+        uids = []
+        if uid_data and uid_data[0]:
+            uid_str = uid_data[0].decode("utf-8", errors="replace") if isinstance(uid_data[0], bytes) else uid_data[0]
+            uids = uid_str.split()
+
+        emails = []
+        for uid_b in uids[-limit:]:
+            uid = uid_b.decode("utf-8", errors="replace") if isinstance(uid_b, bytes) else uid_b
+            result, msg_data = await imap.uid(
+                "fetch", uid,
+                "(BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)] FLAGS)"
+            )
+
+            subject = _parse_header(msg_data, "Subject")
+            from_addr = _parse_header(msg_data, "From")
+            flags = _parse_flags(msg_data)
+
+            emails.append({
+                "id": str(uid),
+                "subject": subject or "No Subject",
+                "from": from_addr or "Unknown",
+                "preview": "",
+                "unread": "\\Seen" not in flags,
+            })
+
+        return emails
+
+    finally:
+        try:
+            await imap.logout()
+        except Exception:
+            pass
+
+
+async def _mark_email_processed(uid: str) -> None:
+    """Mark an email as processed via IMAP flags.
+
+    Sets \\Seen + $NovaProcessed. Falls back to \\Seen + \\Flagged
+    if the server rejects the custom flag (per Pitfall 3).
+    No-op if IMAP host is not configured.
+    """
+    imap = await _get_imap_connection()
+    if imap is None:
+        return
+
+    try:
+        result, _ = await imap.uid("store", uid, "+FLAGS", "(\\Seen $NovaProcessed)")
+        if result == "NO":
+            # Custom flag rejected — fall back to \\Flagged
+            await imap.uid("store", uid, "+FLAGS", "(\\Seen \\Flagged)")
+    finally:
+        try:
+            await imap.logout()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Business logic (unchanged per D-10, D-11, D-12)
+# ---------------------------------------------------------------------------
 
 async def classify_importance(subject: str, sender: str, preview: str) -> bool:
     # 1. Rules-based pass (check keywords in subject or body preview)
@@ -59,48 +193,6 @@ async def classify_importance(subject: str, sender: str, preview: str) -> bool:
     except Exception:
         # Fallback to conservative True on error
         return True
-
-
-async def fetch_emails_from_graph(limit: int = 10, unread_only: bool = False) -> list[dict]:
-    token = await _get_access_token()
-    
-    # Mock data fallback for development if credentials are not configured
-    if not token or not settings.azure_mailbox_email:
-        return [
-            {"id": "msg_1", "subject": "School update: upcoming holidays", "from": "school@edu.nl", "preview": "Dear parents, please note that summer holidays start next week.", "unread": True},
-            {"id": "msg_2", "subject": "Radiale CalDAV Server Update", "from": "admin@local.lan", "preview": "The local radicale container has updated successfully.", "unread": False},
-            {"id": "msg_3", "subject": "Factuur July 2026", "from": "billing@energy.nl", "preview": "Your monthly energy invoice is ready for download.", "unread": True},
-            {"id": "msg_4", "subject": "Spam Offer: Cheap vacations", "from": "spam@deals.com", "preview": "Click here to win a free trip to Hawaii!", "unread": True}
-        ]
-        
-    url = f"https://graph.microsoft.com/v1.0/users/{settings.azure_mailbox_email}/messages"
-    headers = {"Authorization": f"Bearer {token}"}
-    params = {
-        "$top": limit,
-        "$select": "id,subject,from,bodyPreview,isRead,receivedDateTime",
-        "$orderby": "receivedDateTime desc"
-    }
-    if unread_only:
-        params["$filter"] = "isRead eq false"
-        
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=headers, params=params)
-        if resp.status_code != 200:
-            print(f"[ERROR] Failed to fetch emails: {resp.text}")
-            return []
-        
-        raw_emails = resp.json().get("value", [])
-        emails = []
-        for item in raw_emails:
-            sender_info = item.get("from", {}).get("emailAddress", {})
-            emails.append({
-                "id": item.get("id"),
-                "subject": item.get("subject", "No Subject"),
-                "from": f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>",
-                "preview": item.get("bodyPreview", ""),
-                "unread": not item.get("isRead", True)
-            })
-        return emails
 
 
 async def extract_actions_from_email(email: dict) -> list[dict]:
@@ -159,6 +251,33 @@ async def draft_reply(email: dict) -> str:
         return ""
 
 
+# ---------------------------------------------------------------------------
+# SMTP sender (new per D-03, D-04)
+# ---------------------------------------------------------------------------
+
+async def send_email_message(to: str, subject: str, body: str) -> dict:
+    """Send an email via SMTP relay. Returns status dict with {success, code, message}."""
+    message = EmailMessage()
+    message["From"] = f"nova@{settings.nova_domain}" if settings.nova_domain else ""
+    message["To"] = to
+    message["Subject"] = subject
+    message.set_content(body)
+
+    response = await aiosmtplib.send(
+        message,
+        hostname=settings.nova_smtp_host,
+        port=settings.nova_smtp_port,
+        username=settings.nova_smtp_user,
+        password=settings.nova_smtp_pass,
+        use_tls=settings.nova_smtp_use_tls,
+    )
+    return {"success": 200 <= response.code < 300, "code": response.code, "message": response.message}
+
+
+# ---------------------------------------------------------------------------
+# Tools (registered in TOOLS dict via @tool decorator)
+# ---------------------------------------------------------------------------
+
 @tool(
     name="extract_actions_from_email",
     description="Analyze an email and extract actionable items: tasks or calendar events. Returns proposed tasks/events that the user can confirm.",
@@ -172,7 +291,7 @@ async def draft_reply(email: dict) -> str:
 )
 async def extract_actions_tool(email_id: str) -> str:
     """Tool wrapper — fetches email content and extracts actions."""
-    emails = await fetch_emails_from_graph(limit=10)
+    emails = await fetch_emails_imap(limit=10)
     email = next((e for e in emails if e["id"] == email_id), None)
     if not email:
         return f"Email with ID '{email_id}' not found."
@@ -191,7 +310,7 @@ async def extract_actions_tool(email_id: str) -> str:
 
 @tool(
     name="list_recent_emails",
-    description="List recent emails from the shared Outlook mailbox, newest first.",
+    description="List recent emails from the shared mailbox, newest first.",
     parameters={
         "type": "object",
         "properties": {
@@ -201,7 +320,7 @@ async def extract_actions_tool(email_id: str) -> str:
     },
 )
 async def list_recent_emails(limit: int = 10, unread_only: bool = False) -> str:
-    emails = await fetch_emails_from_graph(limit=limit, unread_only=unread_only)
+    emails = await fetch_emails_imap(limit=limit, unread_only=unread_only)
     if not emails:
         return "No recent emails."
         
@@ -219,3 +338,24 @@ async def list_recent_emails(limit: int = 10, unread_only: bool = False) -> str:
         
     scope = "unread " if unread_only else ""
     return f"Recent {scope}emails in shared mailbox:\n\n" + "\n".join(lines)
+
+
+@tool(
+    name="send_email",
+    description="Send an email via SMTP. Returns confirmation or error.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "to": {"type": "string", "description": "Recipient email address."},
+            "subject": {"type": "string", "description": "Email subject line."},
+            "body": {"type": "string", "description": "Email body text."},
+        },
+        "required": ["to", "subject", "body"],
+    },
+)
+async def send_email(to: str, subject: str, body: str) -> str:
+    """Send an email via SMTP and return a confirmation message."""
+    result = await send_email_message(to, subject, body)
+    if result["success"]:
+        return f"Email sent to {to} (subject: {subject})."
+    return f"Failed to send email: SMTP {result['code']}."
