@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 from .config import settings
 
@@ -42,10 +45,14 @@ async def chat(
             # the identical request will just fail identically again.
             if exc.response.status_code < 500 or attempt == max_retries - 1:
                 raise
+            log.warning("Ollama chat attempt %d/%d failed: %s \u2014 retrying in %ds",
+                        attempt + 1, max_retries, exc, 2 ** attempt)
             await asyncio.sleep(2 ** attempt)
-        except httpx.RequestError:
+        except httpx.RequestError as exc:
             if attempt == max_retries - 1:
                 raise
+            log.warning("Ollama chat attempt %d/%d failed: %s \u2014 retrying in %ds",
+                        attempt + 1, max_retries, exc, 2 ** attempt)
             await asyncio.sleep(2 ** attempt)
 
 
