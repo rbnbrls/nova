@@ -7,7 +7,7 @@ import httpx
 from .agent import run_agent
 from .config import settings
 from .db import get_pool
-from .identity import _WHATSAPP_USERS, user_from_whatsapp
+from .identity import user_from_whatsapp
 
 
 async def send_whatsapp_message(to_number: str, text: str):
@@ -18,7 +18,7 @@ async def send_whatsapp_message(to_number: str, text: str):
         return
 
     # Check 24-hour compliance window
-    user = user_from_whatsapp(to_number)
+    user = await user_from_whatsapp(to_number)
     is_template = True
     if user.name != "household":
         try:
@@ -93,16 +93,14 @@ async def process_incoming_whatsapp(payload: dict):
     except Exception:
         return
 
-    # E.164 authorization check
     from . import identity
     clean_sender = sender.lstrip("+")
-    if clean_sender not in identity._WHATSAPP_USERS:
+    # Resolve sender user name
+    user = await identity.user_from_whatsapp(clean_sender)
+    if user == identity.HOUSEHOLD:
         # Refusal policy: Instantly reply with standard message, skip LLM
         await send_whatsapp_message(sender, "Sorry, you are not authorized to use this household assistant.")
         return
-
-    # Resolve sender user name
-    user = identity.user_from_whatsapp(sender)
 
     # Update last_inbound_at in database
     try:

@@ -52,21 +52,20 @@ Explicitly excluded for v1 (deferred to future milestones per roadmap):
 | WhatsApp via Meta Cloud API | Reliability/ToS compliance | ✓ Wired, needs credentials |
 | Coolify for CI/CD | Git-driven deploy without managed PaaS | ✓ Implemented |
 | Track A1/A2 in v1 scope | Cheap to add now, expensive to retrofit | ✓ Complete |
-| v1.1 "User Preferences" superseded by v2.0 hardening | Fix known code-solvable concerns before adding per-user preference features | — Deferred (roadmap Phases 7-10 unbuilt, retained for reference) |
+| v1.1 "User Preferences" | Implement DB-backed settings, self-linking WhatsApp OTP, dynamic briefings scheduling, and DND | ✓ Active |
 
-## Current Milestone: v2.0 Reliability & Security Hardening
+## Current Milestone: v1.1 User Preferences
 
-**Goal:** Close the still-open, code-solvable concerns from `.planning/codebase/CONCERNS.md` so Nova fails gracefully and never trusts an unauthenticated caller.
+**Goal:** Implement Postgres-backed preferences, self-service WhatsApp OTP linking, per-user scheduled briefings (morning & weekly), and per-user Do Not Disturb windows.
 
-**Target fixes (scoped to Reliability + Security buckets):**
-- ✓ Transient Ollama failures retried with bounded backoff instead of failing the turn (`llm.py`)
-- ✓ LLM/tool errors return a friendly fallback reply, never a raw HTTP 500 (`main.py`/`agent.py`)
-- ✓ A chat turn bounded by an overall wall-clock budget across the tool loop (`agent.py`)
-- ✓ Conversation history truncated to a bounded window before hitting the model (`agent.py`)
-- ✓ The chat API authenticates the caller before trusting the `user` attribution (`main.py`)
-- ✓ ops-bridge compares its bridge token in constant time via `hmac.compare_digest` (`ops-bridge/app.py`)
+**Target features:**
+- Postgres-backed preferences and verification codes schema (Phase 7)
+- Migration of existing statically configured numbers to the new DB store (Phase 7)
+- Dashboard-driven self-service WhatsApp linking using Meta AUTHENTICATION templates (Phase 8)
+- Dynamic scheduler job configuration (briefing toggles/times, timezone correction, dynamic rescheduling) (Phase 9)
+- Per-user quiet hours/DND windows gating proactive pushes and deferring suppressed alerts (Phase 10)
 
-**Status**: Milestone v2.0 complete. CONCERNS.md refreshed.
+**Status**: Milestone v1.1 active.
 
 ## Evolution
 
@@ -86,4 +85,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Milestone completed: 2026-07-11 (v1.0). v1.1 superseded. v2.0 completed 2026-07-12.*
+*Milestone completed: 2026-07-11 (v1.0). v2.0 completed 2026-07-12. v1.1 active.*

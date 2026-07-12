@@ -30,7 +30,8 @@ async def send_morning_briefing():
             
     # 2. Iterate and build personalized briefings for configured users
     from . import identity
-    for number, user in identity._WHATSAPP_USERS.items():
+    users_map = await identity.get_all_whatsapp_users()
+    for number, user in users_map.items():
         # Get tasks assigned to this user
         async with pool.acquire() as conn:
             user_row = await conn.fetchrow("SELECT id FROM users WHERE name = $1", user.name)
@@ -111,7 +112,8 @@ async def check_overdue_tasks():
         assignee_name = task["assignee"]
         number = None
         from . import identity
-        for phone, usr in identity._WHATSAPP_USERS.items():
+        users_map = await identity.get_all_whatsapp_users()
+        for phone, usr in users_map.items():
             if usr.name == assignee_name:
                 number = phone
                 break
@@ -158,5 +160,6 @@ async def check_new_emails():
             f"Preview: {mail['preview']}"
         )
         from . import identity
-        for number in identity._WHATSAPP_USERS:
+        users_map = await identity.get_all_whatsapp_users()
+        for number in users_map:
             await send_whatsapp_message(number, alert)

@@ -71,13 +71,7 @@ def test_whatsapp_webhook_valid_signature():
 async def test_webhook_unrecognized_number_refusal():
     from unittest.mock import AsyncMock, patch
     from app.whatsapp import process_incoming_whatsapp
-    
-    # Configure user settings: Ruben is authorized, others are not
-    settings.nova_whatsapp_users = "31612345678:Ruben"
-    
-    # Reload _WHATSAPP_USERS mapping to pick up settings change
     from app import identity
-    identity._WHATSAPP_USERS = identity._parse_whatsapp_map()
     
     payload = {
         "entry": [{
@@ -93,8 +87,10 @@ async def test_webhook_unrecognized_number_refusal():
     }
     
     with patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
-         patch("app.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent:
+         patch("app.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
+         patch("app.identity.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
+        mock_resolve.return_value = identity.HOUSEHOLD
         await process_incoming_whatsapp(payload)
         
         # Verify refusal sent
@@ -107,10 +103,7 @@ async def test_webhook_unrecognized_number_refusal():
 async def test_webhook_authorized_number_success():
     from unittest.mock import AsyncMock, patch
     from app.whatsapp import process_incoming_whatsapp
-    
-    settings.nova_whatsapp_users = "31612345678:Ruben"
     from app import identity
-    identity._WHATSAPP_USERS = identity._parse_whatsapp_map()
     
     payload = {
         "entry": [{
@@ -126,8 +119,10 @@ async def test_webhook_authorized_number_success():
     }
     
     with patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
-         patch("app.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent:
+         patch("app.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
+         patch("app.identity.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
+        mock_resolve.return_value = identity.User(name="Ruben")
         mock_agent.return_value = "Here is your calendar..."
         await process_incoming_whatsapp(payload)
         

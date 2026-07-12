@@ -1,19 +1,16 @@
+from __future__ import annotations
+
 import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.whatsapp import send_whatsapp_message, process_incoming_whatsapp
 from app.scheduler import check_new_emails
+from app import identity
 
 
 @pytest.mark.asyncio
 async def test_inbound_updates_last_inbound_at():
-    # Setup test users mapping
-    from app import identity
-    settings = identity.settings
-    settings.nova_whatsapp_users = "31612345678:Ruben"
-    identity._WHATSAPP_USERS = identity._parse_whatsapp_map()
-    
     payload = {
         "entry": [{
             "changes": [{
@@ -27,16 +24,17 @@ async def test_inbound_updates_last_inbound_at():
         }]
     }
     
-    # Mock database pool and connection
     mock_conn = AsyncMock()
     mock_pool = MagicMock()
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
     
     with patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
          patch("app.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
-         patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool:
+         patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.identity.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
         mock_get_pool.return_value = mock_pool
+        mock_resolve.return_value = identity.User(name="Ruben")
         mock_agent.return_value = "Replying hello"
         
         await process_incoming_whatsapp(payload)
@@ -50,10 +48,7 @@ async def test_inbound_updates_last_inbound_at():
 
 @pytest.mark.asyncio
 async def test_outbound_whatsapp_compliance_checks():
-    from app import identity
     settings = identity.settings
-    settings.nova_whatsapp_users = "31612345678:Ruben"
-    identity._WHATSAPP_USERS = identity._parse_whatsapp_map()
     
     # Mock database pool and connection returning old last_inbound_at (> 24 hours)
     old_time = datetime.now(timezone.utc) - timedelta(hours=25)
@@ -63,8 +58,10 @@ async def test_outbound_whatsapp_compliance_checks():
     mock_pool_old.acquire.return_value.__aenter__.return_value = mock_conn_old
     
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
-         patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool:
+         patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.whatsapp.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
+        mock_resolve.return_value = identity.User(name="Ruben")
         mock_get_pool.return_value = mock_pool_old
         mock_post.return_value.status_code = 200
         settings.whatsapp_phone_number_id = "123"
@@ -86,8 +83,10 @@ async def test_outbound_whatsapp_compliance_checks():
     mock_pool_new.acquire.return_value.__aenter__.return_value = mock_conn_new
     
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
-         patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool:
+         patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.whatsapp.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
+        mock_resolve.return_value = identity.User(name="Ruben")
         mock_get_pool.return_value = mock_pool_new
         mock_post.return_value.status_code = 200
         await send_whatsapp_message("31612345678", "Quick check-in text")
@@ -101,9 +100,6 @@ async def test_outbound_whatsapp_compliance_checks():
 
 @pytest.mark.asyncio
 async def test_email_polling_deduplication():
-    from app import identity
-    identity._WHATSAPP_USERS = {"31612345678": MagicMock(name="Ruben")}
-    
     mock_emails = [
         {"id": "test_email_123", "subject": "Factuur July 2026", "from": "billing@energy.nl", "preview": "Invoice details...", "unread": True}
     ]
@@ -117,8 +113,10 @@ async def test_email_polling_deduplication():
     
     with patch("app.scheduler.fetch_emails_from_graph", new_callable=AsyncMock) as mock_fetch, \
          patch("app.scheduler.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
-         patch("app.scheduler.get_pool", new_callable=AsyncMock) as mock_get_pool:
+         patch("app.scheduler.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.identity.get_all_whatsapp_users", new_callable=AsyncMock) as mock_get_users:
          
+        mock_get_users.return_value = {"31612345678": identity.User(name="Ruben")}
         mock_get_pool.return_value = mock_pool
         mock_fetch.return_value = mock_emails
         
