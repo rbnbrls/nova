@@ -618,7 +618,11 @@ Plans:
 2. Coolify deploys to staging first; promotion to prod requires tests green + evals above threshold
 3. Staging can benchmark new models side-by-side with before/after eval reports
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 28-01-PLAN.md — Staging compose profile: docker-compose.staging.yml, shared network, DB schema setup
+- [ ] 28-02-PLAN.md — Promotion gate & ops pipeline: promote.sh, deploy.sh staging-first, benchmark workflow docs
 
 ---
 
@@ -863,7 +867,7 @@ Plans:
 | 25. Direct Telegram OTP Routing | 0/0 | Not started | — |
 | 26. Agent-Run Tracing & Quality Alerts | 1/1 | Complete    | 2026-07-12 |
 | 27. User-Feedback → Incident Loop | 0/0 | Not started | — |
-| 28. Staging Lane & Model Upgrades | 0/0 | Not started | — |
+| 28. Staging Lane & Model Upgrades | 0/2 | Planned    | — |
 | 29. Scheduled Maintenance Agent | 3/3 | Complete    | 2026-07-12 |
 | 30. Speaker Identity on Voice | 2/2 | Complete    | 2026-07-12 |
 | 31. Per-Person Memory & Privacy Scopes | 1/1 | Complete    | 2026-07-12 |
