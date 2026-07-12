@@ -86,3 +86,38 @@ async def run_migrations():
                             chat_id
                         )
 
+        if settings.nova_voice_room_defaults:
+            import re as _room_re
+            for entry in settings.nova_voice_room_defaults.split(","):
+                entry = entry.strip()
+                if not entry or ":" not in entry:
+                    continue
+                room_id, name = entry.split(":", 1)
+                room_id = room_id.strip()
+                name = name.strip()
+                # Validate room_id: non-empty alphanumeric + underscore
+                if not room_id or not _room_re.match(r"^[a-zA-Z0-9_]+$", room_id):
+                    import logging
+                    logging.getLogger("nova-core").warning(
+                        f"Skipping malformed voice room entry: room_id={room_id!r}"
+                    )
+                    continue
+                user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", name)
+                if not user_id:
+                    import logging
+                    logging.getLogger("nova-core").warning(
+                        f"Skipping voice room entry {room_id}:{name} — user not found"
+                    )
+                    continue
+                await conn.execute(
+                    """
+                    INSERT INTO voice_room_defaults (room_id, default_user_id)
+                    VALUES ($1, $2)
+                    ON CONFLICT (room_id) DO UPDATE SET
+                        default_user_id = EXCLUDED.default_user_id,
+                        updated_at = now()
+                    """,
+                    room_id,
+                    user_id
+                )
+
