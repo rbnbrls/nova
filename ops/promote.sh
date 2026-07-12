@@ -62,7 +62,7 @@ fi
 
 # ── Phase 3: Deploy production ──────────────────────────────────────────────
 log "promote: tests green, deploying production ..."
-if "$OPS_DIR/deploy.sh"; then
+if "$OPS_DIR/deploy.sh" --prod; then
   log "promote: production deployed successfully ✔"
 else
   fail 3 "production deploy failed — check ops/deploy.sh output"

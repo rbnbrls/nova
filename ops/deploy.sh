@@ -2,13 +2,38 @@
 # Deploy the Nova stack as code: trigger Coolify deployments via API and wait
 # for them to finish. Exit 0 = all services deployed; non-zero = deploy failed.
 #
-# Usage: ops/deploy.sh [service-name ...]   (default: all in NOVA_SERVICES)
+# Usage: ops/deploy.sh [--staging|--prod|--all] [service-name ...]
+#   --staging  (default) deploy staging services only
+#   --prod     deploy production services only
+#   --all      deploy both staging and production
+#   service-name  deploy specific service(s) regardless of target
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require curl
 require jq
 
-ONLY_SERVICES=("$@")
+# Parse arguments
+DEPLOY_TARGET="staging"  # default: staging-first
+declare -a ONLY_SERVICES=()
+
+for arg in "$@"; do
+  case "$arg" in
+    --all)  DEPLOY_TARGET="all" ;;
+    --prod) DEPLOY_TARGET="prod" ;;
+    --staging) DEPLOY_TARGET="staging" ;;
+    --help)
+      echo "Usage: $0 [--staging|--prod|--all] [service-name ...]"
+      echo "  --staging  (default) deploy staging services only"
+      echo "  --prod     deploy production services only"
+      echo "  --all      deploy both staging and production"
+      echo "  service-name  deploy specific service(s) regardless of target"
+      exit 0
+      ;;
+    *)
+      ONLY_SERVICES+=("$arg")
+      ;;
+  esac
+done
 
 wants_service() {
   [[ ${#ONLY_SERVICES[@]} -eq 0 ]] && return 0
@@ -18,6 +43,28 @@ wants_service() {
 }
 
 FAILED=0
+
+# ── Select service list based on target ─────────────────────────────────────
+STAGING_SERVICES="${STAGING_SERVICES:-$NOVA_SERVICES}"
+PROD_SERVICES="${PROD_SERVICES:-$NOVA_SERVICES}"
+
+case "$DEPLOY_TARGET" in
+  staging)
+    log "deploy: staging-first mode — deploying staging services"
+    SELECTED_SERVICES="$STAGING_SERVICES"
+    ;;
+  prod)
+    log "deploy: production-only mode"
+    SELECTED_SERVICES="$PROD_SERVICES"
+    ;;
+  all)
+    log "deploy: deploying staging first, then production"
+    for_each_pair "$STAGING_SERVICES" deploy_service
+    log "deploy: staging deployed, waiting 15s before production deploy …"
+    sleep 15
+    SELECTED_SERVICES="$PROD_SERVICES"
+    ;;
+esac
 
 deploy_service() {
   local name="$1" uuid="$2"
@@ -45,7 +92,9 @@ deploy_service() {
   FAILED=1
 }
 
-for_each_pair "$NOVA_SERVICES" deploy_service
+if [[ "$DEPLOY_TARGET" != "all" ]]; then
+  for_each_pair "$SELECTED_SERVICES" deploy_service
+fi
 
 if (( FAILED )); then
   die "one or more deployments failed"
