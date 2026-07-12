@@ -1,5 +1,6 @@
 """Database helper module using asyncpg."""
 from __future__ import annotations
+import os
 
 import asyncpg
 
@@ -26,7 +27,8 @@ async def close_pool():
 
 
 def _run_alembic_upgrade():
-    alembic_cfg = Config("services/nova-core/alembic.ini")
+    _dir = os.path.dirname(os.path.abspath(__file__))
+    alembic_cfg = Config(os.path.join(_dir, "..", "alembic.ini"))
     command.upgrade(alembic_cfg, "head")
 
 
@@ -35,18 +37,6 @@ async def run_migrations():
 
     pool = await get_pool()
     async with pool.acquire() as conn:
-        await conn.execute(
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_inbound_at TIMESTAMP WITH TIME ZONE"
-        )
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS processed_emails (
-                email_id VARCHAR(255) PRIMARY KEY,
-                processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
         if settings.nova_whatsapp_users:
             for entry in settings.nova_whatsapp_users.split(","):
                 entry = entry.strip()
