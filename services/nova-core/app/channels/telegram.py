@@ -22,6 +22,7 @@ def _chunk_message(text: str, max_length: int = 4096) -> list[str]:
     """Split a message into chunks at paragraph boundaries, respecting max_length.
 
     Falls back to sentence boundaries for paragraphs that exceed max_length.
+    Hard-truncates any segment that still exceeds max_length after sentence splitting.
     """
     if len(text) <= max_length:
         return [text]
@@ -40,10 +41,15 @@ def _chunk_message(text: str, max_length: int = 4096) -> list[str]:
             if current_chunk:
                 chunks.append(current_chunk)
             if len(para) > max_length:
-                sentences = para.replace(". ", ".\n").split("\n")
+                sentences = para.replace(". ", ".\n").replace("! ", "!\n").replace("? ", "?\n").split("\n")
                 current_chunk = ""
                 for sentence in sentences:
-                    if len(current_chunk) + len(sentence) + 1 <= max_length:
+                    if len(sentence) > max_length:
+                        if current_chunk:
+                            chunks.append(current_chunk)
+                        chunks.append(sentence[:max_length])
+                        current_chunk = sentence[max_length:]
+                    elif len(current_chunk) + len(sentence) + 1 <= max_length:
                         if current_chunk:
                             current_chunk += " " + sentence
                         else:
@@ -131,19 +137,19 @@ async def _send_to_chat_id(chat_id: str, text: str, proactive: bool, user_name: 
         return
 
     chunks = _chunk_message(text)
-    for i, chunk in enumerate(chunks):
-        url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": chunk,
-            "parse_mode": "HTML",
-        }
-        async with httpx.AsyncClient() as client:
+    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    async with httpx.AsyncClient() as client:
+        for i, chunk in enumerate(chunks):
+            payload = {
+                "chat_id": chat_id,
+                "text": chunk,
+                "parse_mode": "HTML",
+            }
             resp = await client.post(url, json=payload)
             if resp.status_code != 200:
                 print(f"[ERROR] Telegram API replied {resp.status_code}: {resp.text}")
-        if i < len(chunks) - 1:
-            await asyncio.sleep(1)
+            if i < len(chunks) - 1:
+                await asyncio.sleep(1)
 
 
 async def send_telegram_message(chat_id: str, text: str, proactive: bool = False):

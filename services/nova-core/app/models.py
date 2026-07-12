@@ -41,6 +41,7 @@ class RequestCodeRequest(BaseModel):
     user: str
     number: str
     channel: str = "whatsapp"
+    channel_id: str = ""
 
 
 class VerifyCodeRequest(BaseModel):

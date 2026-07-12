@@ -262,16 +262,11 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks) 
         if update_id is not None:
             pool = await db_get_pool()
             async with pool.acquire() as conn:
-                existing = await conn.fetchval(
-                    "SELECT 1 FROM processed_telegram_updates WHERE update_id = $1",
+                result = await conn.execute(
+                    "INSERT INTO processed_telegram_updates (update_id) VALUES ($1) ON CONFLICT (update_id) DO NOTHING",
                     update_id
                 )
-                if not existing:
-                    await conn.execute(
-                        "INSERT INTO processed_telegram_updates (update_id) VALUES ($1) ON CONFLICT DO NOTHING",
-                        update_id
-                    )
-                else:
+                if result != "INSERT 0 1":
                     return {"status": "accepted"}
 
         if text.startswith("/"):
@@ -316,7 +311,7 @@ async def get_preferences():
 
 @app.post("/api/preferences/request-code")
 async def request_code(req: RequestCodeRequest):
-    import random
+    import secrets
     from datetime import datetime, timezone, timedelta
     from .channels.whatsapp import send_whatsapp_message
     
@@ -367,7 +362,7 @@ async def request_code(req: RequestCodeRequest):
         if not user_id:
             raise HTTPException(status_code=404, detail="User not found")
             
-        code = f"{random.randint(100000, 999999)}"
+        code = f"{secrets.randbelow(900000) + 100000}"
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
         channel_id_val = req.channel_id.strip() if req.channel == "telegram" and req.channel_id else ""
         
