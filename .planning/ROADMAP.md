@@ -434,7 +434,11 @@ Plans:
 5. WhatsApp adapter conforms to `ChannelAdapter` interface; existing WhatsApp tests pass unchanged
 6. `channels/` package exists with `ChannelAdapter` ABC, `InboundMessage`, `dispatcher.py` skeleton, `webhook_router.py` skeleton
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+
+- [ ] 19-01-PLAN.md — Drop dead whatsapp_verification_codes table, formalize ChannelAdapter ABC with register_webhooks, verify SCs, update webhook_router skeleton
 
 ---
 
@@ -858,7 +862,7 @@ Plans:
 | 16. Per-User Do Not Disturb | 0/0 | Not started | — |
 | 17. Reliability Hardening | 1/1 | Complete    | 2026-07-12 |
 | 18. Security Hardening | 1/1 | Complete    | 2026-07-12 |
-| 19. Channel Adapter & Multi-Channel Schema | 0/0 | Not started | — |
+| 19. Channel Adapter & Multi-Channel Schema | 0/1 | Not started | — |
 | 20. Telegram Bot Foundation | 0/0 | Not started | — |
 | 21. Multi-Channel Identity & Last-Active Tracking | 0/0 | Not started | — |
 | 22. Push Gateway Refactor | 0/0 | Not started | — |
