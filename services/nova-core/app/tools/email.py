@@ -50,8 +50,8 @@ async def classify_importance(subject: str, sender: str, preview: str) -> bool:
         f"Preview: {preview}\n"
     )
     try:
-        reply = await llm.chat([{"role": "user", "content": prompt}])
-        reply_content = reply.get("content", "").strip().lower()
+        result = await llm.chat([{"role": "user", "content": prompt}])
+        reply_content = result.message.get("content", "").strip().lower()
         return "yes" in reply_content
     except Exception:
         # Fallback to conservative True on error

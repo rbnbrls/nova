@@ -198,10 +198,11 @@ async def test_run_agent_records_audit_on_tool_call():
         async def add_task_tool(title: str, assignee: str = "") -> str:
             return f"Task '{title}' created for {assignee}"
 
+        from app.llm import ChatResult
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat, \
              patch("app.agent.record_tool_call", new_callable=AsyncMock) as mock_record:
 
-            mock_chat.side_effect = [mock_turn1, mock_turn2]
+            mock_chat.side_effect = [ChatResult(message=mock_turn1), ChatResult(message=mock_turn2)]
             resp = await run_agent("add a task", user="Ruben")
 
             # Agent should have completed
@@ -247,11 +248,12 @@ async def test_run_agent_records_denied_confirmation():
         async def create_event_tool(title: str, start: str, end: str = "") -> str:
             return f"Event '{title}' created"
 
+        from app.llm import ChatResult
         # First call returns the tool call, no second call since confirmation fails
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat, \
              patch("app.agent.record_tool_call", new_callable=AsyncMock) as mock_record:
 
-            mock_chat.return_value = mock_turn
+            mock_chat.return_value = ChatResult(message=mock_turn)
 
             # Run agent with an empty history and a user message that does NOT confirm
             resp = await run_agent("no, do not do that", user="Meral")

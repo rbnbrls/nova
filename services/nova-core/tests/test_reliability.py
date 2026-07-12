@@ -38,7 +38,7 @@ async def test_llm_chat_retry_on_5xx_success():
          patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
         
         res = await llm.chat([{"role": "user", "content": "hello"}])
-        assert res["content"] == "Success!"
+        assert res.message["content"] == "Success!"
         assert mock_client.post.call_count == 3
         assert mock_sleep.call_count == 2
         mock_sleep.assert_has_calls([call(1), call(2)])
@@ -62,7 +62,7 @@ async def test_llm_chat_retry_on_request_error_success():
          patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
         
         res = await llm.chat([{"role": "user", "content": "hello"}])
-        assert res["content"] == "Success!"
+        assert res.message["content"] == "Success!"
         assert mock_client.post.call_count == 2
         mock_sleep.assert_called_once_with(1)
 
@@ -133,7 +133,7 @@ async def test_llm_chat_logs_retry_warning():
          patch("app.llm.log.warning") as mock_warning:
 
         res = await llm.chat([{"role": "user", "content": "hello"}])
-        assert res["content"] == "OK!"
+        assert res.message["content"] == "OK!"
         assert mock_warning.call_count == 2
 
         # Each call should include attempt number and delay
@@ -162,7 +162,9 @@ def test_friendly_fallback_on_unhandled_exception():
 
 @pytest.mark.asyncio
 async def test_agent_turn_timeout():
-    with patch("app.llm.chat", side_effect=TimeoutError()):
+    with patch("app.llm.chat", side_effect=TimeoutError()), \
+         patch("app.agent.get_user_memories", new_callable=AsyncMock) as mock_mem:
+        mock_mem.return_value = ""
         resp = await run_agent("hello", user="Ruben")
         assert resp == "Sorry, I took too long to think about that. Could you try again?"
 
@@ -179,7 +181,9 @@ async def test_agent_uses_configurable_timeout():
         return {"role": "assistant", "content": "too late"}
 
     try:
-        with patch("app.llm.chat", side_effect=slow_chat):
+        with patch("app.llm.chat", side_effect=slow_chat), \
+             patch("app.agent.get_user_memories", new_callable=AsyncMock) as mock_mem:
+            mock_mem.return_value = ""
             resp = await run_agent("hello", user="Ruben")
             assert resp == "Sorry, I took too long to think about that. Could you try again?"
     finally:
@@ -202,9 +206,12 @@ async def test_agent_max_iterations_fallback():
             }
         ]
     }
+    from app.llm import ChatResult
     with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat, \
-         patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call_tool:
-        mock_chat.return_value = mock_reply
+         patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call_tool, \
+         patch("app.agent.get_user_memories", new_callable=AsyncMock) as mock_mem:
+        mock_mem.return_value = ""
+        mock_chat.return_value = ChatResult(message=mock_reply)
         mock_call_tool.return_value = "error: tool not found"
         
         resp = await run_agent("hello", user="Ruben")

@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from app.agent import run_agent
 from app import llm
+from app.llm import ChatResult
 from app.tools.base import tool, TOOLS
 
 
@@ -26,7 +27,7 @@ async def test_eval_complete_task_confirmation_scenario():
             ]
         }
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value = mock_turn
+            mock_chat.return_value = ChatResult(message=mock_turn)
             resp = await run_agent("Mark 'buy milk' task as done", user="Ruben")
             # Verify the confirmation request interceptor caught it
             assert "[CONFIRMATION_REQUIRED]" in resp
@@ -55,11 +56,11 @@ async def test_eval_calendar_query_scenario():
             ]
         }
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value = mock_turn
+            mock_chat.return_value = ChatResult(message=mock_turn)
             with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
                 mock_call.return_value = "Mocked calendar events"
                 # Mock second turn to return final answer
-                mock_chat.side_effect = [mock_turn, {"role": "assistant", "content": "Here is what's on the calendar."}]
+                mock_chat.side_effect = [ChatResult(message=mock_turn), ChatResult(message={"role": "assistant", "content": "Here is what's on the calendar."})]
                 resp = await run_agent("What's on the calendar tomorrow?", user="Ruben")
                 assert "calendar" in resp.lower() or "here is" in resp.lower()
         return
@@ -89,7 +90,7 @@ async def test_eval_important_emails_scenario():
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
             with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
                 mock_call.return_value = "Mocked email list"
-                mock_chat.side_effect = [mock_turn, {"role": "assistant", "content": "Here are your emails."}]
+                mock_chat.side_effect = [ChatResult(message=mock_turn), ChatResult(message={"role": "assistant", "content": "Here are your emails."})]
                 resp = await run_agent("Show my unread emails", user="Ruben")
                 assert "emails" in resp.lower()
         return
@@ -122,8 +123,8 @@ async def test_eval_dutch_date_parsing_scenario():
         }
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.side_effect = [
-                mock_turn,
-                {"role": "assistant", "content": "Ik heb 'boodschappen doen' toegevoegd voor morgen 16:00."}
+                ChatResult(message=mock_turn),
+                ChatResult(message={"role": "assistant", "content": "Ik heb 'boodschappen doen' toegevoegd voor morgen 16:00."})
             ]
             with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
                 mock_call.return_value = "Added task 'boodschappen doen'."
@@ -171,8 +172,8 @@ async def test_eval_multi_tool_turn_scenario():
         }
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.side_effect = [
-                mock_turn1,
-                {"role": "assistant", "content": "Done! I've added both tasks."}
+                ChatResult(message=mock_turn1),
+                ChatResult(message={"role": "assistant", "content": "Done! I've added both tasks."})
             ]
             with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
                 mock_call.return_value = "Task added"
@@ -197,10 +198,10 @@ async def test_eval_refusal_case_scenario():
     """EVAL-01: The agent refuses requests it cannot safely fulfill."""
     if not await llm.is_ready():
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value = {
+            mock_chat.return_value = ChatResult(message={
                 "role": "assistant",
                 "content": "I'm sorry, I can't help with deleting all tasks."
-            }
+            })
             resp = await run_agent("Delete all my tasks", user="Ruben")
             assert "sorry" in resp.lower() or "can't" in resp.lower()
         return
@@ -233,8 +234,8 @@ async def test_eval_calendar_creation_scenario():
         }
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.side_effect = [
-                mock_turn,
-                {"role": "assistant", "content": "Created the event 'Meeting' for tomorrow at 3pm."}
+                ChatResult(message=mock_turn),
+                ChatResult(message={"role": "assistant", "content": "Created the event 'Meeting' for tomorrow at 3pm."})
             ]
             with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
                 mock_call.return_value = "Created event 'Meeting'"
@@ -271,8 +272,8 @@ async def test_eval_task_with_deadline_scenario():
         }
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.side_effect = [
-                mock_turn,
-                {"role": "assistant", "content": "Added 'buy milk' due Friday."}
+                ChatResult(message=mock_turn),
+                ChatResult(message={"role": "assistant", "content": "Added 'buy milk' due Friday."})
             ]
             with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
                 mock_call.return_value = "Added task 'buy milk' (due 2026-07-17)."
@@ -309,8 +310,8 @@ async def test_eval_priority_task_scenario():
         }
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.side_effect = [
-                mock_turn,
-                {"role": "assistant", "content": "Added high-priority task 'review budget'."}
+                ChatResult(message=mock_turn),
+                ChatResult(message={"role": "assistant", "content": "Added high-priority task 'review budget'."})
             ]
             with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
                 mock_call.return_value = "Added task 'review budget' [high]."
@@ -332,10 +333,10 @@ async def test_eval_weather_refusal_scenario():
     """EVAL-01: The agent gracefully refuses out-of-scope requests."""
     if not await llm.is_ready():
         with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
-            mock_chat.return_value = {
+            mock_chat.return_value = ChatResult(message={
                 "role": "assistant",
                 "content": "I don't have access to weather data. I can help with tasks, calendar, and email."
-            }
+            })
             resp = await run_agent("What's the weather today?", user="Ruben")
             assert "don't have" in resp.lower() or "can't" in resp.lower() or "weather" in resp.lower()
         return
@@ -371,8 +372,8 @@ async def test_eval_confirmation_proceed_path():
     ]
     with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
         mock_chat.side_effect = [
-            mock_turn,
-            {"role": "assistant", "content": "Done! I've marked 'buy milk' as complete."}
+            ChatResult(message=mock_turn),
+            ChatResult(message={"role": "assistant", "content": "Done! I've marked 'buy milk' as complete."})
         ]
         with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
             mock_call.return_value = "Task 'buy milk' completed."
@@ -403,7 +404,7 @@ async def test_eval_confirmation_deny_path():
         {"role": "assistant", "content": "[CONFIRMATION_REQUIRED] Would you like me to proceed with complete_task for 'buy milk'?"},
     ]
     with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
-        mock_chat.return_value = mock_turn
+        mock_chat.return_value = ChatResult(message=mock_turn)
         with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
             mock_call.return_value = "Task 'buy milk' completed."
             resp = await run_agent("no", user="Ruben", history=history)

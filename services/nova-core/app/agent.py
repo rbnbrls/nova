@@ -111,7 +111,7 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
 
                 tool_calls = result.message.get("tool_calls")
                 if not tool_calls:
-                    return (message.get("content") or "").strip()
+                    return (result.message.get("content") or "").strip()
 
                 # Execute each requested tool and feed results back to the model.
                 for call in tool_calls:

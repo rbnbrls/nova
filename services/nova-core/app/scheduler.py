@@ -270,7 +270,7 @@ async def check_new_emails():
 
 async def process_queued_notifications():
     """Runs every minute to flush queued notifications for users whose DND window has ended."""
-from .db import get_pool, get_user_memories
+    from .db import get_pool, get_user_memories
     from .identity import is_user_in_dnd
     
     pool = await get_pool()
