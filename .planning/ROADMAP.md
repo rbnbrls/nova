@@ -214,7 +214,7 @@ Plans:
 
 Plans:
 
-- [ ] 09-01-PLAN.md — Webhook endpoint tests, identity resolution edge cases, outbound message coverage
+- [x] 09-01-PLAN.md — Webhook endpoint tests, identity resolution edge cases, outbound message coverage
 
 ---
 
