@@ -7,7 +7,10 @@ for backward compatibility with scheduler and existing test patterns.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 import httpx
 
@@ -69,6 +72,14 @@ def _chunk_message(text: str, max_length: int = 4096) -> list[str]:
 
 class TelegramAdapter(ChannelAdapter):
     """Telegram channel via Bot API."""
+
+    async def register_webhooks(self, app: FastAPI) -> None:
+        """Register webhook routes on the FastAPI application.
+
+        Webhook routes are registered in main.py at /webhooks/telegram.
+        Route migration to adapter method deferred to Phase 20.
+        """
+        pass
 
     async def send_message(self, user_name: str, text: str, proactive: bool = False) -> None:
         """ChannelAdapter.send_message: resolve user_name to chat_id, then send."""

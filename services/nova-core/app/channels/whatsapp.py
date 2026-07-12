@@ -7,7 +7,10 @@ for backward compatibility with scheduler and existing test patches.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 import httpx
 
 from ..agent import run_agent
@@ -19,6 +22,14 @@ from . import ChannelAdapter, InboundMessage
 
 class WhatsAppAdapter(ChannelAdapter):
     """WhatsApp channel via Meta Cloud API."""
+
+    async def register_webhooks(self, app: FastAPI) -> None:
+        """Register webhook routes on the FastAPI application.
+
+        Webhook routes are registered in main.py at /webhooks/whatsapp.
+        Route migration to adapter method deferred to Phase 20.
+        """
+        pass
 
     async def send_message(self, user_name: str, text: str, proactive: bool = False) -> None:
         """ChannelAdapter.send_message: resolve user_name to number, then send."""

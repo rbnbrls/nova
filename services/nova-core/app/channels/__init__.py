@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 
 @dataclass
@@ -30,6 +33,19 @@ class ChannelAdapter(ABC):
       - Parses incoming payloads into InboundMessage
       - Sends outbound messages via the channel's API
     """
+
+    @abstractmethod
+    async def register_webhooks(self, app: FastAPI) -> None:
+        """Register webhook routes on the FastAPI application.
+
+        Each channel adapter defines its own webhook route(s) under /webhooks/*
+        and attaches them to the provided FastAPI app instance. The method is
+        called during application startup.
+
+        Args:
+            app: The FastAPI application instance to attach routes to.
+        """
+        ...
 
     @abstractmethod
     async def send_message(self, user_name: str, text: str, proactive: bool = False) -> None:
