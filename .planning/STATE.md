@@ -212,7 +212,14 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Plans executed:** 1 (21-01)
 **Commits:** ca72b4d, 2dd7132
 
+### Session 2026-07-12 (Phase 32 — Household Coordination)
+
+**Started:** 2026-07-12T17:42:00Z
+**Completed:** 2026-07-12T18:10:00Z
+**Plans executed:** 2 (32-01, 32-02)
+**Commits:** 0162cc9, 20448ca, 93a4489, a2a8e15, b697b36, 5181623
+
 ## Operator Next Steps
 
-- Next: Phase 24 — Telegram DND Queuing
+- Next: Phase 33 — Proactivity That Respects Attention
 - Old milestone artifacts in `.planning/milestones/` serve as implementation reference
