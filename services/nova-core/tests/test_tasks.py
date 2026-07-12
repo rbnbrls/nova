@@ -227,3 +227,60 @@ async def test_complete_task_not_found():
 
         result = await complete_task("nonexistent")
         assert "Could not find" in result
+
+
+# ---------------------------------------------------------------------------
+# Priority field (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_add_task_default_priority():
+    """add_task defaults to medium priority when none specified."""
+    conn = AsyncMock()
+    conn.fetchrow.side_effect = _fetchrow_side_effect
+    pool = _make_mock_pool(conn)
+
+    with patch("app.tools.tasks.get_pool", new_callable=AsyncMock) as get_pool:
+        get_pool.return_value = pool
+        result = await add_task("test", user="Ruben")
+        assert "Added task" in result
+        call_args = conn.execute.call_args
+        sql = call_args[0][0]
+        vals = call_args[0][1:]
+        assert '"priority"' in sql or "priority" in sql
+        assert vals[-1] == "medium"
+
+
+@pytest.mark.asyncio
+async def test_add_task_explicit_priority():
+    """add_task accepts and stores explicit priority values."""
+    conn = AsyncMock()
+    conn.fetchrow.side_effect = _fetchrow_side_effect
+    pool = _make_mock_pool(conn)
+
+    with patch("app.tools.tasks.get_pool", new_callable=AsyncMock) as get_pool:
+        get_pool.return_value = pool
+        result = await add_task("urgent task", user="Ruben", priority="high")
+        assert "[high]" in result
+        call_args = conn.execute.call_args
+        vals = call_args[0][1:]
+        assert vals[-1] == "high"
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_due_before_filter():
+    """list_tasks accepts a due_before filter that restricts results."""
+    conn = AsyncMock()
+    conn.fetchrow.side_effect = _fetchrow_side_effect
+    conn.fetch.return_value = [
+        {"title": "old task", "due_at": datetime(2026, 6, 1), "priority": "low", "assignee": "Ruben"},
+    ]
+    pool = _make_mock_pool(conn)
+
+    with patch("app.tools.tasks.get_pool", new_callable=AsyncMock) as get_pool:
+        get_pool.return_value = pool
+        result = await list_tasks(due_before="2026-07-01T00:00:00")
+        assert "old task" in result
+        call_sql = conn.fetch.call_args[0][0]
+        assert "due_at <=" in call_sql

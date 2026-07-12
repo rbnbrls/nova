@@ -34,12 +34,18 @@ async def _get_user_uuid(conn, name: str) -> str | None:
                 "type": "string",
                 "description": "ISO 8601 deadline, e.g. 2026-07-15T16:00:00. Omit if none.",
             },
+            "priority": {
+                "type": "string",
+                "enum": ["low", "medium", "high"],
+                "description": "Priority level. Defaults to medium.",
+            },
         },
         "required": ["title"],
     },
 )
-async def add_task(title: str, user: str, assignee: str | None = None, due_at: str | None = None) -> str:
+async def add_task(title: str, user: str, assignee: str | None = None, due_at: str | None = None, priority: str | None = None) -> str:
     assignee = assignee or user
+    priority = priority or "medium"
     pool = await get_pool()
     async with pool.acquire() as conn:
         assignee_uuid = await _get_user_uuid(conn, assignee)
@@ -48,29 +54,30 @@ async def add_task(title: str, user: str, assignee: str | None = None, due_at: s
         due_dt = None
         if due_at:
             try:
-                # Remove Z/tz offset suffix if any or parse directly
                 due_dt = datetime.fromisoformat(due_at.replace("Z", "+00:00"))
             except ValueError:
                 return f"Error: Invalid date format for due_at: '{due_at}'"
 
         await conn.execute(
             """
-            INSERT INTO tasks (title, assignee_id, created_by, due_at)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO tasks (title, assignee_id, created_by, due_at, priority)
+            VALUES ($1, $2, $3, $4, $5)
             """,
             title,
             assignee_uuid,
             creator_uuid,
-            due_dt
+            due_dt,
+            priority
         )
         
     due = f" (due {due_at})" if due_at else ""
-    return f"Added task '{title}' for {assignee}{due}."
+    prio = f" [{priority}]" if priority != "medium" else ""
+    return f"Added task '{title}' for {assignee}{due}{prio}."
 
 
 @tool(
     name="list_tasks",
-    description="List active household tasks, optionally filtered by assignee.",
+    description="List active household tasks, optionally filtered by assignee or due before a date.",
     parameters={
         "type": "object",
         "properties": {
@@ -78,50 +85,68 @@ async def add_task(title: str, user: str, assignee: str | None = None, due_at: s
                 "type": "string",
                 "enum": ["Ruben", "Meral", "household"],
             },
+            "due_before": {
+                "type": "string",
+                "description": "ISO 8601 filter: only tasks due before this datetime.",
+            },
         },
     },
 )
-async def list_tasks(assignee: str | None = None) -> str:
+async def list_tasks(assignee: str | None = None, due_before: str | None = None) -> str:
     pool = await get_pool()
     async with pool.acquire() as conn:
+        conditions = ["t.status = 'active'"]
+        params = []
+
         if assignee:
             assignee_uuid = await _get_user_uuid(conn, assignee)
+            conditions.append(f"t.assignee_id = ${len(params) + 1}")
+            params.append(assignee_uuid)
+
+        if due_before:
+            conditions.append(f"t.due_at <= ${len(params) + 1}")
+            params.append(datetime.fromisoformat(due_before.replace("Z", "+00:00")))
+
+        where = " AND ".join(conditions)
+
+        if assignee:
             rows = await conn.fetch(
-                """
-                SELECT t.title, t.due_at
+                f"""
+                SELECT t.title, t.due_at, t.priority
                 FROM tasks t
-                WHERE t.status = 'active' AND t.assignee_id = $1
+                WHERE {where}
                 ORDER BY t.due_at ASC NULLS LAST, t.created_at ASC
                 """,
-                assignee_uuid
+                *params
             )
         else:
             rows = await conn.fetch(
-                """
-                SELECT t.title, u.name as assignee, t.due_at
+                f"""
+                SELECT t.title, u.name as assignee, t.due_at, t.priority
                 FROM tasks t
                 LEFT JOIN users u ON t.assignee_id = u.id
-                WHERE t.status = 'active'
+                WHERE {where}
                 ORDER BY t.due_at ASC NULLS LAST, t.created_at ASC
-                """
+                """,
+                *params
             )
-            
+
     if not rows:
         who = f" for {assignee}" if assignee else ""
         return f"No active tasks{who} yet."
-        
+
     lines = []
     for i, row in enumerate(rows, 1):
-        due_str = ""
+        parts = [row["title"]]
+        if row.get("priority") and row["priority"] != "medium":
+            parts.append(f"[{row['priority']}]")
         if row["due_at"]:
-            due_str = f" (due {row['due_at'].isoformat()})"
-        
-        if assignee:
-            lines.append(f"{i}. {row['title']}{due_str}")
-        else:
+            parts.append(f"(due {row['due_at'].isoformat()})")
+        if not assignee:
             assignee_name = row["assignee"] or "unassigned"
-            lines.append(f"{i}. {row['title']} [assigned to {assignee_name}]{due_str}")
-            
+            parts.append(f"[assigned to {assignee_name}]")
+        lines.append(f"{i}. {' '.join(parts)}")
+
     who = f" for {assignee}" if assignee else " (all)"
     return f"Active tasks{who}:\n" + "\n".join(lines)
 
