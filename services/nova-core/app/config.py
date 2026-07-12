@@ -37,11 +37,18 @@ class Settings(BaseSettings):
     nova_ha_token: str = ""
     nova_ha_url: str = "http://homeassistant:8123"
 
-    # MS Graph Email Configuration
-    azure_tenant_id: str = ""
-    azure_client_id: str = ""
-    azure_client_secret: str = ""
-    azure_mailbox_email: str = ""
+    # Email (IMAP + SMTP) — Phase 38
+    nova_domain: str = ""          # No default — must be explicitly set
+    nova_imap_host: str = ""
+    nova_imap_port: int = 993      # IMAPS
+    nova_imap_user: str = ""
+    nova_imap_pass: str = ""
+    nova_imap_use_ssl: bool = True
+    nova_smtp_host: str = ""
+    nova_smtp_port: int = 587      # STARTTLS
+    nova_smtp_user: str = ""
+    nova_smtp_pass: str = ""
+    nova_smtp_use_tls: bool = True
 
     # Household identity: "number:name,number:name"
     nova_whatsapp_users: str = ""
@@ -77,6 +84,13 @@ class Settings(BaseSettings):
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @property
+    def nova_email(self) -> str:
+        """Derived email identity: nova@{NOVA_DOMAIN} (per D-02)."""
+        if not self.nova_domain:
+            return ""
+        return f"nova@{self.nova_domain}"
 
 
 settings = Settings()
