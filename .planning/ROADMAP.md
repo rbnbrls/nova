@@ -242,7 +242,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Proactive Scheduler | 2/2 | Complete    | 2026-07-11 |
 | 6. Read-Only Dashboard | 1/1 | Complete    | 2026-07-11 |
 | 7. Preferences Schema & Identity Migration | 1/1 | Complete | 2026-07-12 |
-| 8. WhatsApp Self-Service OTP Linking | 0/TBD | Not started | - |
+| 8. WhatsApp Self-Service OTP Linking | 1/1 | Complete | 2026-07-12 |
 | 9. Per-User Dynamic Scheduling | 0/TBD | Not started | - |
 | 10. Per-User Do Not Disturb | 0/TBD | Not started | - |
 | 11. Reliability Hardening | 1/1 | Complete | 2026-07-12 |
