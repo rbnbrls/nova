@@ -149,6 +149,54 @@ async def _send_to_number(to_number: str, text: str, proactive: bool, user_name:
             print(f"[ERROR] Meta API replied {resp.status_code}: {resp.text}")
 
 
+async def send_whatsapp_otp(to_number: str, code: str) -> None:
+    """Send a one-time verification code via Meta's whatsapp_authentication template.
+
+    Uses the pre-approved AUTHENTICATION category template that Meta provides
+    to all WhatsApp Business Accounts. On Meta API failure, raises RuntimeError
+    so the caller can surface a user-facing retry option.
+    """
+    clean_number = to_number.lstrip("+")
+
+    if not settings.whatsapp_phone_number_id or not settings.whatsapp_access_token:
+        print(f"[MOCK WHATSAPP OTP] To: {clean_number}, Code: {code}")
+        return
+
+    url = f"https://graph.facebook.com/v18.0/{settings.whatsapp_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {settings.whatsapp_access_token}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": clean_number,
+        "type": "template",
+        "template": {
+            "name": "whatsapp_authentication",
+            "language": {"code": "en"},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": code},
+                    ],
+                },
+            ],
+        },
+    }
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        if resp.status_code in (200, 201):
+            print(f"[OTP SENT] To: {clean_number}")
+        else:
+            print(f"[OTP FAILED] To: {clean_number}, Status: {resp.status_code}, Response: {resp.text}")
+            raise RuntimeError(
+                f"Failed to send OTP to {clean_number}: Meta API returned {resp.status_code}"
+            )
+
+
 async def send_whatsapp_message(to_number: str, text: str, proactive: bool = False):
     """Send message response back to the user via Meta Cloud API (backward-compat)."""
     await _send_to_number(to_number, text, proactive, user_name=None)
