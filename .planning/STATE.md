@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Ready to plan
-last_updated: "2026-07-12T15:55:30.678Z"
+last_updated: "2026-07-12T16:09:00.000Z"
 progress:
   total_phases: 37
-  completed_phases: 30
-  total_plans: 36
-  completed_plans: 36
-  percent: 81
+  completed_phases: 31
+  total_plans: 43
+  completed_plans: 39
+  percent: 86
 stopped_at: null
 current_phase: 36
 current_phase_name: Phase 36 — Write-Action Audit Trail
@@ -218,6 +218,13 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Completed:** 2026-07-12T18:10:00Z
 **Plans executed:** 2 (32-01, 32-02)
 **Commits:** 0162cc9, 20448ca, 93a4489, a2a8e15, b697b36, 5181623
+
+### Session 2026-07-12 (Phase 15 — Per-User Dynamic Scheduling)
+
+**Started:** 2026-07-12T16:04:54Z
+**Completed:** 2026-07-12T16:09:00Z
+**Plans executed:** 1 (15-01)
+**Commits:** 1d8198d
 
 ## Operator Next Steps
 
