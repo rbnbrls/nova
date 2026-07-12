@@ -649,11 +649,16 @@ Plans:
 **Success Criteria:**
 
 1. Each voice satellite has a per-room default user assignment
-2. Voice-embedding speaker verification identifies the speaker; falls back to asking on low confidence
+2. Voice-embedding speaker verification identifies the speaker; falls back to asking on low confidence *(deferred to future iteration per CONTEXT.md)*
 3. Both users can say "what's on *my* plan?" at the same satellite and get their own answers
 4. Speaker ID respects existing per-user identity, memory, and preference system
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+
+- [ ] 30-01-PLAN.md — Voice room defaults infrastructure: config, DB migration, RoomSessionManager with TTL
+- [ ] 30-02-PLAN.md — Room-aware voice endpoint: room param, whoami intent, tests
 
 ---
 
