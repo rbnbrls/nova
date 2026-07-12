@@ -54,9 +54,38 @@ def _run_alembic_upgrade():
 
 
 async def run_migrations():
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        has_users = await conn.fetchval(
+            "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users')"
+        )
+        has_alembic = await conn.fetchval(
+            "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'alembic_version')"
+        )
+        if has_users and not has_alembic:
+            has_chores = await conn.fetchval(
+                "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'chores')"
+            )
+            has_recurrence = False
+            if has_chores:
+                has_recurrence = await conn.fetchval(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name='chores' AND column_name='recurrence_rule'
+                    )
+                    """
+                )
+            
+            _dir = os.path.dirname(os.path.abspath(__file__))
+            alembic_cfg = Config(os.path.join(_dir, "..", "alembic.ini"))
+            if has_recurrence:
+                command.stamp(alembic_cfg, "head")
+            else:
+                command.stamp(alembic_cfg, "0001")
+
     _run_alembic_upgrade()
 
-    pool = await get_pool()
     async with pool.acquire() as conn:
         if settings.nova_whatsapp_users:
             for entry in settings.nova_whatsapp_users.split(","):
