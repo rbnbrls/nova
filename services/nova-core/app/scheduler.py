@@ -155,12 +155,10 @@ async def send_weekly_briefing_for_user(user_name: str):
     await send_to_user(user_name, briefing, proactive=True)
 
 
+# DEPRECATED: Use run_briefing_scheduler() directly.
 async def send_morning_briefing():
-    """Daily morning briefing summarizing tasks, calendar events, and important emails (legacy/fallback)."""
-    from . import identity
-    users_map = await identity.get_all_whatsapp_users()
-    for number, user in users_map.items():
-        await send_morning_briefing_for_user(user.name)
+    """Legacy entry point — delegates to per-user scheduler."""
+    await run_briefing_scheduler()
 
 
 async def run_briefing_scheduler():
@@ -202,26 +200,56 @@ async def run_briefing_scheduler():
 
 
 async def check_overdue_tasks():
-    """Hourly check for tasks that are past their due dates."""
+    """Check for overdue tasks and send escalation reminders.
+
+    Escalation stages:
+    - DAY_OF: Due today but not completed → "gentle" reminder
+    - 1-2 DAYS OVERDUE: "Don't forget" → firmer
+    - 3+ DAYS OVERDUE: Overdue flag (also shown on dashboard)
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
-        overdue_tasks = await conn.fetch(
+        tasks = await conn.fetch(
             """
             SELECT t.title, t.due_at, u.name as assignee, u.id as user_id
             FROM tasks t
             LEFT JOIN users u ON t.assignee_id = u.id
-            WHERE t.status = 'active' AND t.due_at < now()
+            WHERE t.status = 'active' AND t.due_at < now() + interval '1 day'
             """
         )
-        
-    if not overdue_tasks:
+
+    if not tasks:
         return
-        
-    for task in overdue_tasks:
+
+    from datetime import timezone
+    now_utc = datetime.now(timezone.utc)
+
+    for task in tasks:
         assignee_name = task["assignee"]
-        if assignee_name:
-            due_str = task["due_at"].strftime('%Y-%m-%d %H:%M')
-            alert = f"Reminder: Your task '{task['title']}' was due at {due_str}."
+        if not assignee_name:
+            continue
+
+        due_at = task["due_at"]
+        if not due_at:
+            continue
+
+        hours_overdue = (now_utc - due_at).total_seconds() / 3600
+        title = task["title"]
+
+        if hours_overdue < 0:
+            # Due today (within next 24h, not yet overdue) — gentle reminder
+            due_str = due_at.strftime('%H:%M')
+            alert = f"Gentle reminder: '{title}' is due today at {due_str}."
+            await send_to_user(assignee_name, alert, proactive=True)
+        elif hours_overdue < 48:
+            # 0-48 hours overdue — firm reminder
+            days_str = "today" if hours_overdue < 24 else "yesterday"
+            alert = f"Reminder: '{title}' was due {days_str}. Please complete it."
+            await send_to_user(assignee_name, alert, proactive=True)
+        else:
+            # 48+ hours overdue — overdue flag
+            days_over = int(hours_overdue / 24)
+            alert = f"⚠ Overdue ({days_over}d): '{title}'. Please complete as soon as possible."
             await send_to_user(assignee_name, alert, proactive=True)
 
 
