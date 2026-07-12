@@ -281,4 +281,34 @@ async def process_incoming_telegram(payload: dict):
     await _send_to_chat_id(chat_id, reply, proactive=False, user_name=user.name)
 
 
+async def send_telegram_otp(user_name: str, code: str) -> bool:
+    """Send a 6-digit OTP verification code to a user's Telegram DM.
+
+    Resolves the household member's name to their Telegram chat_id via
+    channel_identities, then dispatches the code via _send_to_chat_id.
+
+    Returns True if the chat_id was found and the send was dispatched.
+    Returns False if no chat_id is linked for the given user.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ci.channel_id FROM channel_identities ci
+            JOIN users u ON ci.user_id = u.id
+            WHERE u.name = $1 AND ci.channel = 'telegram'
+            """,
+            user_name
+        )
+        if not row or not row["channel_id"]:
+            print(f"[ERROR] No Telegram chat_id for {user_name}, cannot send OTP")
+            return False
+        chat_id = row["channel_id"]
+
+    message_text = f"Your Nova verification code is: {code}. It expires in 5 minutes."
+    await _send_to_chat_id(chat_id, message_text, proactive=False, user_name=user_name)
+    print(f"[OTP SENT] Telegram OTP to {user_name} (chat_id: {chat_id})")
+    return True
+
+
 adapter = TelegramAdapter()
