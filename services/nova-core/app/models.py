@@ -66,4 +66,14 @@ class DNDSettingsRequest(BaseModel):
     dnd_end: str
 
 
+class LinkWhatsAppStartRequest(BaseModel):
+    user: str
+    number: str  # E.164 format, no leading '+'
+
+
+class LinkWhatsAppVerifyRequest(BaseModel):
+    user: str
+    code: str
+
+
 

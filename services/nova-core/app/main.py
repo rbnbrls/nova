@@ -26,9 +26,9 @@ from fastapi.staticfiles import StaticFiles
 from . import llm, db
 from .agent import run_agent
 from .config import settings
-from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest
+from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest, LinkWhatsAppStartRequest, LinkWhatsAppVerifyRequest
 from .security import verify_whatsapp_signature, verify_telegram_signature
-from .channels.whatsapp import process_incoming_whatsapp
+from .channels.whatsapp import process_incoming_whatsapp, send_whatsapp_otp
 from .channels.telegram import process_incoming_telegram
 from .db import get_pool as db_get_pool
 from .tools.calendar import _get_calendar
@@ -204,6 +204,161 @@ async def dashboard_stream():
             
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+
+
+@app.post("/dashboard/link-whatsapp/start")
+async def link_whatsapp_start(req: LinkWhatsAppStartRequest):
+    """Start WhatsApp OTP linking flow — validate number, check conflicts/rate limits, send code."""
+    import secrets
+    from datetime import datetime, timezone, timedelta
+
+    pool = await db.get_pool()
+
+    # 1. Validate user exists
+    async with pool.acquire() as conn:
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", req.user)
+        if not user_id:
+            raise HTTPException(status_code=404, detail="User not found")
+
+    # 2. Clean and validate number
+    clean_number = req.number.strip().lstrip("+")
+    if not clean_number.isdigit() or len(clean_number) < 8:
+        raise HTTPException(status_code=400, detail="Invalid phone number format")
+
+    async with pool.acquire() as conn:
+        # 3. Check number uniqueness (claim conflict)
+        existing_owner = await conn.fetchval(
+            """
+            SELECT u.name FROM user_preferences up
+            JOIN users u ON up.user_id = u.id
+            WHERE up.whatsapp_number = $1 AND u.name != $2
+            """,
+            clean_number,
+            req.user,
+        )
+        if existing_owner:
+            raise HTTPException(
+                status_code=400,
+                detail=f"This number is already linked to {existing_owner}",
+            )
+
+        # 4. Check rate limit (1 code per number per 5 minutes)
+        rate_count = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM channel_verification_codes
+            WHERE whatsapp_number = $1 AND created_at > now() - interval '5 minutes'
+            """,
+            clean_number,
+        )
+        if rate_count and rate_count > 0:
+            raise HTTPException(
+                status_code=429,
+                detail="A code was already sent recently. Please wait 5 minutes before requesting a new code.",
+            )
+
+        # 5. Generate code
+        code = f"{secrets.randbelow(900000) + 100000}"
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        # 6. Insert verification code
+        await conn.execute(
+            """
+            INSERT INTO channel_verification_codes (user_id, whatsapp_number, code, expires_at, channel)
+            VALUES ($1, $2, $3, $4, 'whatsapp')
+            """,
+            user_id,
+            clean_number,
+            code,
+            expires_at,
+        )
+
+    # 7. Send OTP via WhatsApp
+    try:
+        await send_whatsapp_otp(clean_number, code)
+    except RuntimeError:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to send verification code. Please try again.",
+        )
+
+    # 8. Log code for debugging
+    print(f"[OTP STATUS] Verification code for {req.user} ({clean_number}): {code}")
+
+    return {"status": "code_sent"}
+
+
+@app.post("/dashboard/link-whatsapp/verify")
+async def link_whatsapp_verify(req: LinkWhatsAppVerifyRequest):
+    """Verify the OTP code entered by the user and link the WhatsApp number."""
+    from datetime import datetime, timezone
+
+    pool = await db.get_pool()
+
+    # 1. Look up user
+    async with pool.acquire() as conn:
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", req.user)
+        if not user_id:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # 2. Fetch most recent active code
+        row = await conn.fetchrow(
+            """
+            SELECT id, whatsapp_number, code, attempts, expires_at
+            FROM channel_verification_codes
+            WHERE user_id = $1 AND channel = 'whatsapp' AND attempts < 3 AND expires_at > now()
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            user_id,
+        )
+        if not row:
+            raise HTTPException(
+                status_code=400,
+                detail="No active verification code found. Please request a new code.",
+            )
+
+        # 3. Increment attempts immediately (always counts toward limit)
+        await conn.execute(
+            "UPDATE channel_verification_codes SET attempts = attempts + 1 WHERE id = $1",
+            row["id"],
+        )
+
+        # 4. Compare code
+        remaining = 2 - row["attempts"]  # attempts left after THIS one
+        if row["code"] != req.code.strip():
+            if remaining <= 0:
+                # Expire code immediately
+                await conn.execute(
+                    "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
+                    row["id"],
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail="Incorrect code. No attempts remaining. Please request a new code.",
+                )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Incorrect code. {remaining} attempts remaining.",
+            )
+
+        # 5. Correct code — link the number
+        await conn.execute(
+            """
+            INSERT INTO user_preferences (user_id, whatsapp_number)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id) DO UPDATE SET whatsapp_number = EXCLUDED.whatsapp_number
+            """,
+            user_id,
+            row["whatsapp_number"],
+        )
+
+        # 6. Mark code as consumed
+        await conn.execute(
+            "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
+            row["id"],
+        )
+
+    return {"status": "success", "linked_number": row["whatsapp_number"]}
 
 
 @app.get("/webhooks/whatsapp")
