@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Ready to plan
-last_updated: "2026-07-12T16:03:00.000Z"
+last_updated: "2026-07-12T14:47:00.000Z"
 progress:
   total_phases: 37
   completed_phases: 15
-  total_plans: 15
-  completed_plans: 15
-  percent: 41
+  total_plans: 18
+  completed_plans: 19
+  percent: 46
 stopped_at: null
-current_phase: 36
-current_phase_name: Phase 36 — Write-Action Audit Trail
+current_phase: 29
+current_phase_name: Phase 29 — Scheduled Maintenance Agent
 ---
 
 # Project State
@@ -100,8 +100,36 @@ Phases execute in strict numeric order: 1 → 2 → ... → 37. Each phase depen
 
 Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.planning/milestones/` for code verification reference. The actual codebase already implements features matching the old phase structure — verify each new phase's implementation status against the code during the discuss/plan phase.
 
+## Current Session
+
+**Phase 29: Scheduled Maintenance Agent** — All 3 plans completed (2026-07-12)
+
+### Executed Plans
+
+| Plan | Summary |
+|------|---------|
+| 29-01 | ForgejoClient, maintenance subpackage stubs, config, Docker mounts, scheduler wiring |
+| 29-02 | Nightly dependency scanner (pip + pip-audit) and log-anomaly reviewer (OpenObserve) |
+| 29-03 | Nightly backup verification (scratch Docker container) and weekly trend reporter (disk/VRAM/GPU/Postgres) |
+
+### Decisions Made
+
+- ForgejoClient follows ops-bridge's httpx + token-auth + label-resolution pattern
+- All maintenance jobs gated by feature toggles (master + per-job)
+- Docker socket mounted read-only for security (mitigation T-29-02)
+- Log excerpts redacted (IPs, emails, paths) before filing as Forgejo issues (T-29-07)
+- Ephemeral scratch containers always cleaned up (even on failure)
+- Trend data stored as HTML comment JSON in issue body for machine parsing
+- All subprocess calls use async/timeout; no blocking subprocess in async context
+
+### Last session
+
+**Started:** 2026-07-12T13:57:30Z
+**Completed:** 2026-07-12T14:47:00Z
+**Plans executed:** 3
+**Commits:** f5ef4b1, 26e84b5, ec2b979, e114a30, 8224831
+
 ## Operator Next Steps
 
-- Begin with `/gsd-manager` to view the new dashboard
-- Start work on Phase 1: CI/CD & Test Infrastructure
+- Next: Phase 30 — Speaker Identity on Voice
 - Old milestone artifacts in `.planning/milestones/` serve as implementation reference
