@@ -95,7 +95,20 @@ async def create_event(title: str, start: str, end: str, description: str | None
         return f"Error: Invalid date format: start='{start}', end='{end}'"
 
     calendar = _get_calendar()
-    
+
+    # Check for conflicts before creating
+    conflicts = await detect_conflicts(start_dt, end_dt)
+    if conflicts:
+        conflict_summary = "\n".join(
+            f"- {c['title']} ({c['start']} to {c['end']})"
+            for c in conflicts[:5]
+        )
+        return (
+            f"Warning: The proposed time conflicts with existing events:\n"
+            f"{conflict_summary}\n\n"
+            f"Event '{title}' was NOT created. Please choose a different time."
+        )
+
     # Construct iCalendar event
     ical = iCalendar()
     ical.add("prodid", "-//Nova Household Assistant//")
@@ -173,3 +186,44 @@ async def is_user_busy() -> bool:
         print(f"[ERROR] is_user_busy calendar query failed: {e}")
         return False  # Be conservative: if we can't check, don't block
     return False
+
+
+async def detect_conflicts(start: datetime, end: datetime) -> list[dict]:
+    """Detect existing calendar events that conflict with a proposed time slot.
+
+    Returns a list of conflicting events with title, start, end, location.
+    Returns empty list on error or no conflicts.
+    """
+    try:
+        calendar = _get_calendar()
+        events = calendar.search(start=start, end=end, event=True, expand=True)
+    except Exception as e:
+        print(f"[ERROR] detect_conflicts query failed: {e}")
+        return []
+
+    conflicts = []
+    for ev in events:
+        try:
+            vevent = ev.vobject_instance.vevent
+            dtstart = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
+            dtend = vevent.dtend.value if hasattr(vevent, "dtend") else None
+            summary = vevent.summary.value if hasattr(vevent, "summary") else "No Title"
+            location = vevent.location.value if hasattr(vevent, "location") and vevent.location.value else ""
+
+            if not dtstart or not dtend:
+                continue
+            if not isinstance(dtstart, datetime) or not isinstance(dtend, datetime):
+                continue
+
+            # Check overlap: A.start < B.end AND A.end > B.start
+            if dtstart < end and dtend > start:
+                conflicts.append({
+                    "title": summary,
+                    "start": dtstart.isoformat(),
+                    "end": dtend.isoformat(),
+                    "location": location,
+                })
+        except Exception:
+            continue
+
+    return conflicts
