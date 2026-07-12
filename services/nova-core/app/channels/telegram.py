@@ -218,7 +218,16 @@ async def _send_to_chat_id(chat_id: str, text: str, proactive: bool, user_name: 
 
     if proactive and user.name != "household":
         if await is_user_in_dnd(user.name):
-            print(f"[DND ACTIVE] Suppressing Telegram proactive message for {user.name} ({chat_id})")
+            print(f"[DND ACTIVE] Queuing Telegram proactive message for {user.name} ({chat_id})")
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", user.name)
+                if user_id:
+                    await conn.execute(
+                        """INSERT INTO queued_notifications (user_id, whatsapp_number, message_text, channel)
+                           VALUES ($1, $2, $3, 'telegram')""",
+                        user_id, chat_id, text
+                    )
             return
 
     if not settings.telegram_bot_token:
