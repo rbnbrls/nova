@@ -30,10 +30,14 @@ Phases and features not yet assigned to a milestone.
 **Goal:** Replace MS Graph email integration with IMAP-based reading and SMTP-based sending, driven by a single NOVA_DOMAIN env var. Add send_email tool. Use IMAP flags for deduplication instead of the processed_emails database table.
 **Requirements**: TBD
 **Depends on:** Phase 37
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
+**Wave 1**
 
-- [ ] 38-01-PLAN.md — Config fields (nova_domain, imap_*, smtp_*), remove azure_*, add aioimaplib + aiosmtplib
-- [ ] 38-02-PLAN.md — Core refactor: IMAP fetch, SMTP send, send_email tool, scheduler adaptation
-- [ ] 38-03-PLAN.md — Alembic migration to drop processed_emails, rewrite email and scheduler tests
+- [x] 38-01-PLAN.md — Config fields (nova_domain, imap_*, smtp_*), remove azure_*, add aioimaplib + aiosmtplib
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 38-02-PLAN.md — Core refactor: IMAP fetch, SMTP send, send_email tool, scheduler adaptation
+- [x] 38-03-PLAN.md — Alembic migration to drop processed_emails, rewrite email and scheduler tests

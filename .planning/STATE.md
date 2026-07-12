@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
-status: Ready to plan
-last_updated: "2026-07-12T16:19:58.952Z"
+status: In Progress
+stopped_at: Completed 38-02-PLAN.md
+last_updated: "2026-07-12T18:53:34.347Z"
 progress:
-  total_phases: 37
-  completed_phases: 37
-  total_plans: 43
-  completed_plans: 43
+  total_phases: 1
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 3
   percent: 100
-stopped_at: null
-current_phase: 34
-current_phase_name: Phase 34 — Deeper Email & Calendar Intelligence
-current_plan: 01
+current_phase: 38
+current_phase_name: Phase 38 — Subdomain and Email
+current_plan: 03
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: `.planning/ROADMAP.md` (reorganized 2026-07-12)
 
 **Core value:** A private, fully local household assistant that Ruben & Méral can reach by text or voice, keeping a shared plan (tasks, calendar, important email) — reasoning and data never leave the house.
 
-**Current focus:** ROADMAP.md entirely reorganized from scratch into 37 phases across 10 build tiers (Tier 0 Foundation → Tier 9 Advanced Features). All phases reset to Not Started.
+**Current focus:** Phase 38 — subdomain and email
 
 ## Execution Order
 
@@ -265,3 +265,22 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 
 - Next: Phase 34 — Deeper Email & Calendar Intelligence
 - Old milestone artifacts in `.planning/milestones/` serve as implementation reference
+
+## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 38 added: subdomain and email
+
+## Session
+
+**Last session:** 2026-07-12T18:53:29.948Z
+**Stopped at:** Phase 38 context gathered
+**Resume file:** .planning/phases/38-subdomain-and-email/38-CONTEXT.md
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Notes |
+|-------|------|----------|-------|
+| Phase 38-subdomain-and-email P01 | 8min | 3 tasks | 3 files |
+| Phase 38-subdomain-and-email P03 | 11min | 3 tasks | 3 files |
