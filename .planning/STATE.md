@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
-status: Ready to plan
-last_updated: "2026-07-12T14:47:00.000Z"
+status: Milestone complete
+last_updated: "2026-07-12T16:50:00Z"
 progress:
   total_phases: 37
-  completed_phases: 15
-  total_plans: 18
-  completed_plans: 19
-  percent: 46
+  completed_phases: 19
+  total_plans: 25
+  completed_plans: 24
+  percent: 51
 stopped_at: null
-current_phase: 29
-current_phase_name: Phase 29 — Scheduled Maintenance Agent
+current_phase: 36
+current_phase_name: Phase 36 — Write-Action Audit Trail
 ---
 
 # Project State
@@ -102,17 +102,31 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 
 ## Current Session
 
-**Phase 29: Scheduled Maintenance Agent** — All 3 plans completed (2026-07-12)
+**Phase 30: Speaker Identity on Voice** — Plans 30-01 and 30-02 completed (2026-07-12)
 
 ### Executed Plans
 
 | Plan | Summary |
 |------|---------|
+| 30-01 | Voice room defaults DB table, Alembic migration, seed logic, RoomSessionManager with TTL |
+| 30-02 | Room-aware /v1/chat/completions endpoint, whoami intent, room-based user resolution, tests |
+| 35-01 | HA REST API tools (ha_get_state, ha_call_service, ha_query_presence), config, confirmation gate, tests |
 | 29-01 | ForgejoClient, maintenance subpackage stubs, config, Docker mounts, scheduler wiring |
 | 29-02 | Nightly dependency scanner (pip + pip-audit) and log-anomaly reviewer (OpenObserve) |
 | 29-03 | Nightly backup verification (scratch Docker container) and weekly trend reporter (disk/VRAM/GPU/Postgres) |
 
 ### Decisions Made
+
+- Room session TTL set to 30 min (configurable) matching typical voice satellite usage patterns
+- Cleanup interval set to 5 min for responsive memory management
+- Seed logic follows same asyncpg pattern as WhatsApp/Telegram seed blocks for consistency
+- WhoAmI regex compiled at module level for performance, only matches exactly known patterns
+- WhoAmI short-circuits agent loop (no run_agent call) for immediate response
+- Explicit ?user= query param takes precedence over room resolution
+- Room defaults to 'default' when neither query param nor body field provided
+
+- Each retry attempt logs a warning with attempt number, max retries, exception, and delay — both for HTTPStatusError (5xx) and RequestError branches. (17-01)
+- Per-turn wall-clock timeout default raised from 60s to 120s to accommodate up to 3 retries. (17-01)
 
 - ForgejoClient follows ops-bridge's httpx + token-auth + label-resolution pattern
 - All maintenance jobs gated by feature toggles (master + per-job)
@@ -122,6 +136,11 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 - Trend data stored as HTML comment JSON in issue body for machine parsing
 - All subprocess calls use async/timeout; no blocking subprocess in async context
 
+- HA REST API with Long-Lived Access Token (env vars NOVA_HA_TOKEN / NOVA_HA_URL)
+- Three tools: ha_get_state, ha_call_service, ha_query_presence
+- Presence checking via person entities in HA
+- Service-calling tools through Phase 8 confirmation gate
+
 ### Last session
 
 **Started:** 2026-07-12T13:57:30Z
@@ -129,7 +148,14 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Plans executed:** 3
 **Commits:** f5ef4b1, 26e84b5, ec2b979, e114a30, 8224831
 
+### This session
+
+**Started:** 2026-07-12T16:20:00Z
+**Completed:** 2026-07-12T16:50:00Z
+**Plans executed:** 2 (30-01, 30-02)
+**Commits:** 603997f, fbb7352, bef8358, ac2ba91
+
 ## Operator Next Steps
 
-- Next: Phase 30 — Speaker Identity on Voice
+- Next: Phase 37 — Paper & Photo Intake
 - Old milestone artifacts in `.planning/milestones/` serve as implementation reference
