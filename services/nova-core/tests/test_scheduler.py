@@ -185,3 +185,89 @@ async def test_run_briefing_scheduler_triggers():
         # Verify weekly was not triggered
         mock_weekly.assert_not_called()
 
+
+# ---------------------------------------------------------------------------
+# Phase 11: Briefing content tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_morning_briefing_includes_tasks():
+    """Morning briefing includes active tasks for the user."""
+    mock_conn = AsyncMock()
+    mock_conn.fetchrow.return_value = {"id": "uuid-ruben"}
+    mock_conn.fetch.return_value = [{"title": "Buy milk", "due_at": None}]
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    with patch("app.scheduler.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.scheduler._get_calendar") as mock_cal, \
+         patch("app.scheduler.fetch_emails_from_graph", return_value=[]), \
+         patch("app.scheduler.classify_importance", return_value=False), \
+         patch("app.scheduler.send_to_user", new_callable=AsyncMock) as mock_send:
+
+        mock_cal.return_value.search.return_value = []
+        mock_get_pool.return_value = mock_pool
+
+        from app.scheduler import send_morning_briefing_for_user
+        await send_morning_briefing_for_user("Ruben")
+
+        sent_text = mock_send.call_args[0][1]
+        assert "Buy milk" in sent_text
+        assert "No events today" in sent_text
+        assert "No new important emails" in sent_text
+
+
+@pytest.mark.asyncio
+async def test_morning_briefing_empty_states():
+    """Morning briefing handles empty tasks, events, and emails gracefully."""
+    mock_conn = AsyncMock()
+    mock_conn.fetchrow.return_value = {"id": "uuid-ruben"}
+    mock_conn.fetch.return_value = []
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    with patch("app.scheduler.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.scheduler._get_calendar") as mock_cal, \
+         patch("app.scheduler.fetch_emails_from_graph", return_value=[]), \
+         patch("app.scheduler.classify_importance", return_value=False), \
+         patch("app.scheduler.send_to_user", new_callable=AsyncMock) as mock_send:
+
+        mock_cal.return_value.search.return_value = []
+        mock_get_pool.return_value = mock_pool
+
+        from app.scheduler import send_morning_briefing_for_user
+        await send_morning_briefing_for_user("Ruben")
+
+        sent_text = mock_send.call_args[0][1]
+        assert "No tasks assigned" in sent_text
+        assert "No events today" in sent_text
+        assert "No new important emails" in sent_text
+
+
+@pytest.mark.asyncio
+async def test_proactive_send_uses_template():
+    """Proactive sends use the pre-approved template outside 24h window."""
+    mock_conn = AsyncMock()
+    mock_conn.fetchrow.return_value = {"id": "uuid-ruben"}
+    mock_conn.fetch.return_value = []
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    with patch("app.scheduler.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.scheduler._get_calendar") as mock_cal, \
+         patch("app.scheduler.fetch_emails_from_graph", return_value=[]), \
+         patch("app.scheduler.classify_importance", return_value=False), \
+         patch("app.scheduler.send_to_user", new_callable=AsyncMock) as mock_send:
+
+        mock_cal.return_value.search.return_value = []
+        mock_get_pool.return_value = mock_pool
+
+        from app.scheduler import send_morning_briefing_for_user
+        await send_morning_briefing_for_user("Ruben")
+
+        call_kwargs = mock_send.call_args[1]
+        assert call_kwargs.get("proactive") is True
+        sent_text = mock_send.call_args[0][1]
+        assert "Good morning" in sent_text
+
