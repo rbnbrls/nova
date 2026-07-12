@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     nova_timezone: str = "Europe/Amsterdam"
     nova_api_token: str = ""
     nova_max_iterations: int = 6
+    # Per-turn wall-clock timeout in seconds (covers all iterations + retries)
+    nova_max_turn_timeout: int = 120
 
     # LLM (Ollama)
     ollama_base_url: str = "http://ollama:11434"
@@ -30,6 +32,9 @@ class Settings(BaseSettings):
     # Calendar (CalDAV)
     caldav_url: str = "http://radicale:5232/"
 
+    # Home Assistant
+    nova_ha_token: str = ""
+    nova_ha_url: str = "http://homeassistant:8123"
 
     # MS Graph Email Configuration
     azure_tenant_id: str = ""
@@ -61,6 +66,9 @@ class Settings(BaseSettings):
     maintenance_trend_report_enabled: bool = True
     backup_dump_dir: str = "/backups/postgres"
     backup_dump_pattern: str = "nova-*.sql"
+
+    # Voice room defaults: comma-separated "room_name:UserName" pairs
+    nova_voice_room_defaults: str = ""
 
     @property
     def database_url(self) -> str:

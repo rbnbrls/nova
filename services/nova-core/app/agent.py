@@ -85,7 +85,7 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
     specs = tools.tool_specs()
 
     try:
-        async with asyncio.timeout(60):
+        async with asyncio.timeout(settings.nova_max_turn_timeout):
             for _ in range(settings.nova_max_iterations):
                 message = await llm.chat(messages, tools=specs)
                 messages.append(message)
