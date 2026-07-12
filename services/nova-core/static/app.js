@@ -176,7 +176,14 @@ async function fetchPreferences() {
 }
 
 function updateSettingsUI() {
-    const userPrefs = preferencesCache[activeSettingsUser] || { whatsapp_number: '' };
+    const userPrefs = preferencesCache[activeSettingsUser] || { 
+        whatsapp_number: '', 
+        morning_enabled: true, 
+        morning_time: '07:00',
+        weekly_enabled: true,
+        weekly_day: 1,
+        weekly_time: '09:00'
+    };
     const linkedVal = document.getElementById('linked-number-val');
     const phoneInput = document.getElementById('phone-input');
     
@@ -186,6 +193,18 @@ function updateSettingsUI() {
     if (phoneInput && document.getElementById('verify-code-row').classList.contains('hidden')) {
         phoneInput.value = userPrefs.whatsapp_number || '';
     }
+    
+    const morningEnabled = document.getElementById('morning-enabled');
+    const morningTime = document.getElementById('morning-time');
+    const weeklyEnabled = document.getElementById('weekly-enabled');
+    const weeklyDay = document.getElementById('weekly-day');
+    const weeklyTime = document.getElementById('weekly-time');
+    
+    if (morningEnabled) morningEnabled.checked = userPrefs.morning_enabled;
+    if (morningTime) morningTime.value = userPrefs.morning_time;
+    if (weeklyEnabled) weeklyEnabled.checked = userPrefs.weekly_enabled;
+    if (weeklyDay) weeklyDay.value = userPrefs.weekly_day;
+    if (weeklyTime) weeklyTime.value = userPrefs.weekly_time;
 }
 
 // User tab switching
@@ -294,6 +313,44 @@ const btnCancelVerify = document.getElementById('btn-cancel-verify');
 if (btnCancelVerify) {
     btnCancelVerify.addEventListener('click', () => {
         cancelVerifyState();
+    });
+}
+
+// Save Briefing Settings button click
+const btnSaveSettings = document.getElementById('btn-save-settings');
+if (btnSaveSettings) {
+    btnSaveSettings.addEventListener('click', async () => {
+        clearMsg();
+        
+        const morningEnabled = document.getElementById('morning-enabled').checked;
+        const morningTime = document.getElementById('morning-time').value;
+        const weeklyEnabled = document.getElementById('weekly-enabled').checked;
+        const weeklyDay = parseInt(document.getElementById('weekly-day').value, 10);
+        const weeklyTime = document.getElementById('weekly-time').value;
+        
+        try {
+            const resp = await fetch('/api/preferences/briefings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user: activeSettingsUser,
+                    morning_enabled: morningEnabled,
+                    morning_time: morningTime,
+                    weekly_enabled: weeklyEnabled,
+                    weekly_day: weeklyDay,
+                    weekly_time: weeklyTime
+                })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                showMsg('Briefing settings saved successfully!');
+                fetchPreferences();
+            } else {
+                showMsg(data.detail || 'Failed to save settings', true);
+            }
+        } catch (err) {
+            showMsg('Network error saving briefing settings', true);
+        }
     });
 }
 

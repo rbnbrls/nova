@@ -53,22 +53,57 @@
                         <button class="settings-tab active" data-user="Ruben">Ruben</button>
                         <button class="settings-tab" data-user="Meral">Méral</button>
                     </div>
-                    <div class="settings-form-group">
-                        <div class="status-container">
-                            <span class="status-label">Linked Number:</span>
-                            <span class="status-value" id="linked-number-val">Loading...</span>
+                    <div class="settings-form-sections">
+                        <div class="settings-form-group">
+                            <h3>WhatsApp Number</h3>
+                            <div class="status-container">
+                                <span class="status-label">Linked Number:</span>
+                                <span class="status-value" id="linked-number-val">Loading...</span>
+                            </div>
+                            <div class="input-row" id="request-code-row">
+                                <input type="text" id="phone-input" placeholder="e.g. 31612345678" />
+                                <button class="btn btn-primary" id="btn-request-code">Send Code</button>
+                            </div>
+                            <div class="input-row hidden" id="verify-code-row">
+                                <input type="text" id="code-input" placeholder="6-digit code" />
+                                <button class="btn btn-success" id="btn-verify-code">Verify & Link</button>
+                                <button class="btn btn-secondary" id="btn-cancel-verify">Cancel</button>
+                            </div>
                         </div>
-                        <div class="input-row" id="request-code-row">
-                            <input type="text" id="phone-input" placeholder="e.g. 31612345678" />
-                            <button class="btn btn-primary" id="btn-request-code">Send Code</button>
+
+                        <div class="settings-form-group">
+                            <h3>Briefing Schedules</h3>
+                            <div class="schedule-row">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="morning-enabled" />
+                                    <span class="checkmark"></span>
+                                    Morning Briefing
+                                </label>
+                                <input type="time" id="morning-time" value="07:00" />
+                            </div>
+                            <div class="schedule-row">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="weekly-enabled" />
+                                    <span class="checkmark"></span>
+                                    Weekly Briefing
+                                </label>
+                                <select id="weekly-day">
+                                    <option value="1">Monday</option>
+                                    <option value="2">Tuesday</option>
+                                    <option value="3">Wednesday</option>
+                                    <option value="4">Thursday</option>
+                                    <option value="5">Friday</option>
+                                    <option value="6">Saturday</option>
+                                    <option value="7">Sunday</option>
+                                </select>
+                                <input type="time" id="weekly-time" value="09:00" />
+                            </div>
+                            <div class="input-row">
+                                <button class="btn btn-success" id="btn-save-settings">Save Briefing Settings</button>
+                            </div>
                         </div>
-                        <div class="input-row hidden" id="verify-code-row">
-                            <input type="text" id="code-input" placeholder="6-digit code" />
-                            <button class="btn btn-success" id="btn-verify-code">Verify & Link</button>
-                            <button class="btn btn-secondary" id="btn-cancel-verify">Cancel</button>
-                        </div>
-                        <div class="settings-message" id="settings-msg"></div>
                     </div>
+                    <div class="settings-message" id="settings-msg"></div>
                 </div>
             </section>
         </main>

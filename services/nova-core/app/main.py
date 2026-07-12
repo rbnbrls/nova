@@ -26,13 +26,13 @@ from fastapi.staticfiles import StaticFiles
 from . import llm, db
 from .agent import run_agent
 from .config import settings
-from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest
+from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest
 from .security import verify_whatsapp_signature
 from .whatsapp import process_incoming_whatsapp
 from .tools.calendar import _get_calendar
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks
+from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, run_briefing_scheduler
 
 log = logging.getLogger("nova-core")
 
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
     
     # Register background jobs
     scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails")
-    scheduler.add_job(send_morning_briefing, "cron", hour=7, minute=0, id="send_morning_briefing")
+    scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler")
     scheduler.add_job(check_overdue_tasks, "interval", hours=1, id="check_overdue_tasks")
     scheduler.start()
     
@@ -215,7 +215,9 @@ async def get_preferences():
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT u.name, up.whatsapp_number, up.dnd_enabled, up.dnd_start, up.dnd_end
+            SELECT u.name, up.whatsapp_number, up.dnd_enabled, up.dnd_start, up.dnd_end,
+                   up.morning_briefing_enabled, up.morning_briefing_time,
+                   up.weekly_briefing_enabled, up.weekly_briefing_day, up.weekly_briefing_time
             FROM users u
             LEFT JOIN user_preferences up ON u.id = up.user_id
             WHERE u.name IN ('Ruben', 'Meral')
@@ -228,6 +230,11 @@ async def get_preferences():
             "dnd_enabled": r["dnd_enabled"] if r["dnd_enabled"] is not None else False,
             "dnd_start": r["dnd_start"].strftime("%H:%M") if r["dnd_start"] else "22:00",
             "dnd_end": r["dnd_end"].strftime("%H:%M") if r["dnd_end"] else "07:00",
+            "morning_enabled": r["morning_briefing_enabled"] if r["morning_briefing_enabled"] is not None else True,
+            "morning_time": r["morning_briefing_time"].strftime("%H:%M") if r["morning_briefing_time"] else "07:00",
+            "weekly_enabled": r["weekly_briefing_enabled"] if r["weekly_briefing_enabled"] is not None else True,
+            "weekly_day": r["weekly_briefing_day"] if r["weekly_briefing_day"] is not None else 1,
+            "weekly_time": r["weekly_briefing_time"].strftime("%H:%M") if r["weekly_briefing_time"] else "09:00",
         }
     return prefs
 
@@ -339,6 +346,51 @@ async def verify_code(req: VerifyCodeRequest):
         )
         
     return {"status": "success", "linked_number": row["whatsapp_number"]}
+
+
+@app.post("/api/preferences/briefings")
+async def save_briefing_preferences(req: BriefingSettingsRequest):
+    # Parse times
+    try:
+        from datetime import datetime
+        m_time = datetime.strptime(req.morning_time, "%H:%M").time()
+        w_time = datetime.strptime(req.weekly_time, "%H:%M").time()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid time format. Must be HH:MM.")
+        
+    if req.weekly_day < 1 or req.weekly_day > 7:
+        raise HTTPException(status_code=400, detail="Invalid day of week. Must be 1-7 (Monday-Sunday).")
+        
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", req.user)
+        if not user_id:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        await conn.execute(
+            """
+            INSERT INTO user_preferences (
+                user_id, 
+                morning_briefing_enabled, morning_briefing_time,
+                weekly_briefing_enabled, weekly_briefing_day, weekly_briefing_time
+            )
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (user_id) DO UPDATE SET
+                morning_briefing_enabled = EXCLUDED.morning_briefing_enabled,
+                morning_briefing_time = EXCLUDED.morning_briefing_time,
+                weekly_briefing_enabled = EXCLUDED.weekly_briefing_enabled,
+                weekly_briefing_day = EXCLUDED.weekly_briefing_day,
+                weekly_briefing_time = EXCLUDED.weekly_briefing_time
+            """,
+            user_id,
+            req.morning_enabled,
+            m_time,
+            req.weekly_enabled,
+            req.weekly_day,
+            w_time
+        )
+        
+    return {"status": "success"}
 
 
 import os

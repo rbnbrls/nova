@@ -134,3 +134,54 @@ async def test_email_polling_deduplication():
         # 2. Second poll is skipped due to side_effect returning 1
         await check_new_emails()
         mock_send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_briefing_scheduler_triggers():
+    import zoneinfo
+    
+    mock_conn = AsyncMock()
+    now_local = datetime.now(zoneinfo.ZoneInfo("Europe/Amsterdam"))
+    match_time = now_local.time()
+    mismatch_time = (now_local + timedelta(hours=2)).time()
+    
+    mock_rows = [
+        {
+            "name": "Ruben",
+            "whatsapp_number": "31612345678",
+            "morning_briefing_enabled": True,
+            "morning_briefing_time": match_time,
+            "weekly_briefing_enabled": False,
+            "weekly_briefing_day": 1,
+            "weekly_briefing_time": mismatch_time,
+        },
+        {
+            "name": "Meral",
+            "whatsapp_number": "31687654321",
+            "morning_briefing_enabled": True,
+            "morning_briefing_time": mismatch_time,
+            "weekly_briefing_enabled": False,
+            "weekly_briefing_day": 1,
+            "weekly_briefing_time": mismatch_time,
+        }
+    ]
+    mock_conn.fetch.return_value = mock_rows
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+    
+    with patch("app.scheduler.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.scheduler.send_morning_briefing_for_user", new_callable=AsyncMock) as mock_morning, \
+         patch("app.scheduler.send_weekly_briefing_for_user", new_callable=AsyncMock) as mock_weekly, \
+         patch("app.scheduler.settings") as mock_settings:
+         
+        mock_settings.nova_timezone = "Europe/Amsterdam"
+        mock_get_pool.return_value = mock_pool
+        
+        from app.scheduler import run_briefing_scheduler
+        await run_briefing_scheduler()
+        
+        # Verify morning was triggered for Ruben (matches time)
+        mock_morning.assert_called_once_with("Ruben", "31612345678")
+        # Verify weekly was not triggered
+        mock_weekly.assert_not_called()
+

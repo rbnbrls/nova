@@ -46,3 +46,13 @@ class VerifyCodeRequest(BaseModel):
     user: str
     code: str
 
+
+class BriefingSettingsRequest(BaseModel):
+    user: str
+    morning_enabled: bool
+    morning_time: str
+    weekly_enabled: bool
+    weekly_day: int
+    weekly_time: str
+
+

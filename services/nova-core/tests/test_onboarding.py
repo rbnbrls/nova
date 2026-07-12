@@ -18,6 +18,11 @@ def test_get_preferences(client):
             "dnd_enabled": True,
             "dnd_start": datetime.strptime("22:00", "%H:%M").time(),
             "dnd_end": datetime.strptime("07:00", "%H:%M").time(),
+            "morning_briefing_enabled": True,
+            "morning_briefing_time": datetime.strptime("07:00", "%H:%M").time(),
+            "weekly_briefing_enabled": True,
+            "weekly_briefing_day": 1,
+            "weekly_briefing_time": datetime.strptime("09:00", "%H:%M").time(),
         },
         {
             "name": "Meral",
@@ -25,6 +30,11 @@ def test_get_preferences(client):
             "dnd_enabled": False,
             "dnd_start": None,
             "dnd_end": None,
+            "morning_briefing_enabled": False,
+            "morning_briefing_time": None,
+            "weekly_briefing_enabled": False,
+            "weekly_briefing_day": None,
+            "weekly_briefing_time": None,
         }
     ]
     mock_conn = AsyncMock()
@@ -151,3 +161,34 @@ def test_verify_code_incorrect_attempts_exceeded(client):
         # Attempts updated
         mock_conn.execute.assert_called_once()
         assert "UPDATE whatsapp_verification_codes SET attempts = attempts + 1" in mock_conn.execute.call_args[0][0]
+
+
+def test_save_briefing_preferences_success(client):
+    mock_conn = AsyncMock()
+    mock_conn.fetchval.return_value = "ruben-user-uuid"
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+    
+    with patch("app.main.db.get_pool", new_callable=AsyncMock) as mock_get_pool:
+        mock_get_pool.return_value = mock_pool
+        resp = client.post(
+            "/api/preferences/briefings",
+            json={
+                "user": "Ruben",
+                "morning_enabled": True,
+                "morning_time": "08:30",
+                "weekly_enabled": False,
+                "weekly_day": 2,
+                "weekly_time": "10:00",
+            }
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "success"
+        
+        # Verify inserted into database
+        mock_conn.execute.assert_called_once()
+        args, kwargs = mock_conn.execute.call_args
+        assert "INSERT INTO user_preferences" in args[0]
+        assert args[1] == "ruben-user-uuid"
+        assert args[2] is True
+
