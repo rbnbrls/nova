@@ -78,4 +78,13 @@ class LinkWhatsAppVerifyRequest(BaseModel):
     code: str
 
 
+class LinkTelegramStartRequest(BaseModel):
+    user: str
+
+
+class LinkTelegramVerifyRequest(BaseModel):
+    user: str
+    code: str
+
+
 

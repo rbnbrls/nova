@@ -27,10 +27,10 @@ from fastapi.staticfiles import StaticFiles
 from . import llm, db
 from .agent import run_agent
 from .config import settings
-from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest, LinkWhatsAppStartRequest, LinkWhatsAppVerifyRequest
+from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest, LinkWhatsAppStartRequest, LinkWhatsAppVerifyRequest, LinkTelegramStartRequest, LinkTelegramVerifyRequest
 from .security import verify_whatsapp_signature, verify_telegram_signature
 from .channels.whatsapp import process_incoming_whatsapp, send_whatsapp_otp
-from .channels.telegram import process_incoming_telegram, _handle_telegram_command
+from .channels.telegram import process_incoming_telegram, _handle_telegram_command, send_telegram_otp
 from .channels.webhook_router import register_all_webhooks
 from .db import get_pool as db_get_pool
 from .tools.calendar import _get_calendar
@@ -460,6 +460,158 @@ async def link_whatsapp_verify(req: LinkWhatsAppVerifyRequest):
         )
 
     return {"status": "success", "linked_number": row["whatsapp_number"]}
+
+
+@app.post("/dashboard/link-telegram/start")
+async def link_telegram_start(req: LinkTelegramStartRequest):
+    """Start Telegram OTP linking flow — validate user, check chat_id, rate limits, send code."""
+    import secrets
+    from datetime import datetime, timezone, timedelta
+
+    pool = await db.get_pool()
+
+    # 1. Validate user exists
+    async with pool.acquire() as conn:
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", req.user)
+        if not user_id:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # 2. Look up Telegram chat_id
+        chat_id = await conn.fetchval(
+            """
+            SELECT ci.channel_id FROM channel_identities ci
+            JOIN users u ON ci.user_id = u.id
+            WHERE u.name = $1 AND ci.channel = 'telegram'
+            """,
+            req.user,
+        )
+        if not chat_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No Telegram account linked to this user. Please send a message to Nova on Telegram first.",
+            )
+
+        # 3. Check rate limit (1 code per user per 5 minutes for telegram)
+        rate_count = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM channel_verification_codes
+            WHERE user_id = $1 AND channel = 'telegram' AND created_at > now() - interval '5 minutes'
+            """,
+            user_id,
+        )
+        if rate_count and rate_count > 0:
+            raise HTTPException(
+                status_code=429,
+                detail="A code was already sent recently. Please wait 5 minutes before requesting a new code.",
+            )
+
+        # 4. Generate 6-digit code
+        code = f"{secrets.randbelow(900000) + 100000}"
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        # 5. Insert verification code (store chat_id in whatsapp_number column)
+        await conn.execute(
+            """
+            INSERT INTO channel_verification_codes (user_id, whatsapp_number, code, expires_at, channel)
+            VALUES ($1, $2, $3, $4, 'telegram')
+            """,
+            user_id,
+            chat_id,
+            code,
+            expires_at,
+        )
+
+    # 6. Send OTP via Telegram DM
+    try:
+        sent = await send_telegram_otp(req.user, code)
+        if not sent:
+            raise RuntimeError("No chat_id found")
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to send verification code via Telegram. Please try again.",
+        )
+
+    # 7. Log code for debugging
+    print(f"[OTP STATUS] Telegram verification code for {req.user}: {code}")
+
+    return {"status": "code_sent"}
+
+
+@app.post("/dashboard/link-telegram/verify")
+async def link_telegram_verify(req: LinkTelegramVerifyRequest):
+    """Verify the OTP code entered by the user and enable Telegram channel."""
+    from datetime import datetime, timezone
+
+    pool = await db.get_pool()
+
+    # 1. Look up user
+    async with pool.acquire() as conn:
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", req.user)
+        if not user_id:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # 2. Fetch most recent active code for telegram
+        row = await conn.fetchrow(
+            """
+            SELECT id, whatsapp_number, code, attempts, expires_at
+            FROM channel_verification_codes
+            WHERE user_id = $1 AND channel = 'telegram' AND attempts < 3 AND expires_at > now()
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            user_id,
+        )
+        if not row:
+            raise HTTPException(
+                status_code=400,
+                detail="No active verification code found. Please request a new code.",
+            )
+
+        # 3. Increment attempts immediately (always counts toward limit)
+        await conn.execute(
+            "UPDATE channel_verification_codes SET attempts = attempts + 1 WHERE id = $1",
+            row["id"],
+        )
+
+        # 4. Compare code
+        remaining = 2 - row["attempts"]  # attempts left after THIS one
+        if row["code"] != req.code.strip():
+            if remaining <= 0:
+                # Expire code immediately
+                await conn.execute(
+                    "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
+                    row["id"],
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail="Incorrect code. No attempts remaining. Please request a new code.",
+                )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Incorrect code. {remaining} attempts remaining.",
+            )
+
+        # 5. Correct code — enable telegram in channels_enabled (idempotent)
+        await conn.execute(
+            """
+            UPDATE user_preferences
+            SET channels_enabled = ARRAY_APPEND(
+                COALESCE(channels_enabled, '{}'),
+                'telegram'
+            )
+            WHERE user_id = $1 AND NOT ('telegram' = ANY(COALESCE(channels_enabled, '{}')))
+            """,
+            user_id,
+        )
+
+        # 6. Mark code as consumed
+        await conn.execute(
+            "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
+            row["id"],
+        )
+
+    return {"status": "success"}
 
 
 @app.get("/webhooks/whatsapp")
