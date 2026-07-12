@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Ready to plan
-last_updated: "2026-07-12T14:42:21Z"
+last_updated: "2026-07-12T17:20:00.000Z"
 progress:
   total_phases: 37
-  completed_phases: 21
-  total_plans: 26
-  completed_plans: 24
-  percent: 57
+  completed_phases: 24
+  total_plans: 32
+  completed_plans: 31
+  percent: 69
 stopped_at: null
 current_phase: 36
 current_phase_name: Phase 36 — Write-Action Audit Trail
@@ -102,11 +102,18 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 
 ## Current Session
 
-**Phase 30: Speaker Identity on Voice** — Plans 30-01 and 30-02 completed (2026-07-12)
+**Phase 19: Channel Adapter Pattern & Multi-Channel Schema** — Plan 19-01 completed (2026-07-12)
 
 ### Executed Plans
 
 | Plan | Not started |
+|------|---------|
+| 28-01 | docker-compose.staging.yml, shared nova-net network, staging entrypoint, .env.staging.example |
+| 28-02 | ops/promote.sh promotion gate, staging-first deploy.sh, config.env.example with benchmark workflow |
+|------|---------|
+| 19-01 | Drop unused whatsapp_verification_codes table, formalize ChannelAdapter ABC with register_webhooks, verify SC compliance |
+|------|---------|
+| 31-01 | Per-person memory privacy scopes — schema, memory tools, agent/briefing integration |
 |------|---------|
 | 30-01 | Voice room defaults DB table, Alembic migration, seed logic, RoomSessionManager with TTL |
 | 30-02 | Room-aware /v1/chat/completions endpoint, whoami intent, room-based user resolution, tests |
@@ -146,6 +153,23 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 - Auth ordering test at main.py:141-145 uses AsyncMock to detect run_agent calls — guards against future reordering (18-01)
 - ops-bridge app.py:70 uses hmac.compare_digest (constant-time) — existing test proves it (18-01)
 
+- Memory scope defaults to 'private' — users must explicitly opt-in to household sharing (31-01)
+- SQL WHERE clause `(user_id = $1 AND scope = 'private') OR scope = 'household'` is the sole privacy enforcement point (31-01)
+- `forget` tool requires user confirmation via confirmation gate (like destructive calendar/task ops) (31-01)
+- `remember` tool is additive and does NOT need confirmation (31-01)
+- Shared memory helper lives in `app/db.py` to avoid circular imports between scheduler and agent (31-01)
+
+- register_webhooks stubs in WhatsAppAdapter and TelegramAdapter are no-ops (pass); actual route migration to webhook_router.py happens in Phase 20 (19-01)
+
+- Shared nova-net bridge network connecting all production + staging containers (28-01)
+- Staging entrypoint uses psql with CREATE DATABASE IF NOT EXISTS — idempotent on restart (28-01)
+- postgresql-client installed in Dockerfile base stage for both tester and final stage (28-01)
+- Internal-only services (postgres, ollama, vector) kept without host ports (28-01)
+- promote.sh calls deploy.sh --prod for clean separation of concerns (28-02)
+- Deploy default changed to staging-first (--staging) with --prod and --all flags (28-02)
+- NOVA_SERVICES fallback ensures backward compatibility (28-02)
+- Migration 0007 downgrade recreates whatsapp_verification_codes table exactly; safe rollback with zero data loss (zero rows in production) (19-01)
+
 ### Last session
 
 **Started:** 2026-07-12T13:57:30Z
@@ -155,12 +179,12 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 
 ### This session
 
-**Started:** 2026-07-12T16:20:00Z
-**Completed:** 2026-07-12T14:42:00Z
-**Plans executed:** 3 (30-01, 30-02, 18-01)
-**Commits:** 603997f, fbb7352, bef8358, ac2ba91, 1e01acf, 1514796
+**Started:** 2026-07-12T15:11:16Z
+**Completed:** 2026-07-12T17:20:00Z
+**Plans executed:** 5 (19-01, 28-01, 28-02, 27-01, 27-02)
+**Commits:** 9bd21a6, bf28ce4, 448a7e5, 8171608, 9bbe99a, c97cec9, 9eb2e76, 2ca58cd, eacf997, f507b93, 83a727e, 2356134, d381ae9
 
 ## Operator Next Steps
 
-- Next: Phase 37 — Paper & Photo Intake
+- Next: Phase 28 — Staging Lane & Model Upgrades
 - Old milestone artifacts in `.planning/milestones/` serve as implementation reference
