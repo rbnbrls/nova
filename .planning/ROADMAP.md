@@ -385,7 +385,11 @@ Plans:
 3. Single turn has an overall wall-clock budget — not just iteration count
 4. Long conversations are truncated to a bounded history window before being sent to the model
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+
+- [ ] 17-01-PLAN.md — Retry logging, configurable 120s wall-clock budget, test coverage
 
 ---
 
@@ -626,9 +630,9 @@ Plans:
 
 Plans:
 
-- [ ] 29-01-PLAN.md — ForgejoClient, maintenance subpackage stubs, config, Docker setup, scheduler wiring
-- [ ] 29-02-PLAN.md — Nightly dependency/CVE scanner, log-anomaly reviewer
-- [ ] 29-03-PLAN.md — Backup verification, disk/VRAM trend reporter
+- [x] 29-01-PLAN.md — ForgejoClient, maintenance subpackage stubs, config, Docker setup, scheduler wiring
+- [x] 29-02-PLAN.md — Nightly dependency/CVE scanner, log-anomaly reviewer
+- [x] 29-03-PLAN.md — Backup verification, disk/VRAM trend reporter
 
 ---
 
@@ -745,7 +749,11 @@ Plans:
 3. Presence-aware: suppress "leave now" nudges when already gone; route voice answers to the speaker's room
 4. "Turn off the living-room lights when my meeting starts" works end-to-end
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+
+- [ ] 35-01-PLAN.md — HA REST API tools (ha_get_state, ha_call_service, ha_query_presence), config, confirmation gate, tests
 
 ---
 
@@ -766,6 +774,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 36-01-PLAN.md — Write-action audit trail (migration, agent recording, dashboard endpoint, SSE feed, UI panel)
 
 **UI hint**: yes
@@ -790,6 +799,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
+
 - [x] 37-01-PLAN.md — Image download & vision analysis pipeline (Wave 1)
 - [ ] 37-02-PLAN.md — process_photo tool, confirmation extension, end-to-end wiring & tests (Wave 2)
 
@@ -831,12 +841,12 @@ Plans:
 | 26. Agent-Run Tracing & Quality Alerts | 0/0 | Not started | — |
 | 27. User-Feedback → Incident Loop | 0/0 | Not started | — |
 | 28. Staging Lane & Model Upgrades | 0/0 | Not started | — |
-| 29. Scheduled Maintenance Agent | 3/3 | Complete | 2026-07-12 |
+| 29. Scheduled Maintenance Agent | 3/3 | Complete    | 2026-07-12 |
 | 30. Speaker Identity on Voice | 0/0 | Not started | — |
 | 31. Per-Person Memory & Privacy Scopes | 0/0 | Not started | — |
 | 32. Household Coordination | 0/0 | Not started | — |
 | 33. Proactivity That Respects Attention | 0/0 | Not started | — |
 | 34. Deeper Email & Calendar Intelligence | 0/0 | Not started | — |
-| 35. Home Assistant as a Tool | 0/0 | Not started | — |
+| 35. Home Assistant as a Tool | 0/1 | Not started | — |
 | 36. Write-Action Audit Trail | 1/1 | Complete    | 2026-07-12 |
-| 37. Paper & Photo Intake | 1/2 | In progress | — |
+| 37. Paper & Photo Intake | 1/1 | Complete    | 2026-07-12 |
