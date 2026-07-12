@@ -2,11 +2,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import caldav
 from icalendar import Calendar as iCalendar, Event as iEvent
 
 from .base import tool
 from ..config import settings
+
+
+def _normalize_dt(dt_str: str) -> datetime:
+    dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ZoneInfo(settings.nova_timezone))
+    return dt
 
 
 def _get_calendar() -> caldav.Calendar:
@@ -32,8 +40,8 @@ def _get_calendar() -> caldav.Calendar:
 )
 async def list_events(start: str, end: str) -> str:
     try:
-        start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
-        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        start_dt = _normalize_dt(start)
+        end_dt = _normalize_dt(end)
     except ValueError:
         return f"Error: Invalid date format: start='{start}', end='{end}'"
 
@@ -64,7 +72,7 @@ async def list_events(start: str, end: str) -> str:
 
 
 @tool(
-    name="create_event",
+    name=    "create_event",
     description="Create a calendar event on the shared household calendar.",
     parameters={
         "type": "object",
@@ -72,15 +80,17 @@ async def list_events(start: str, end: str) -> str:
             "title": {"type": "string"},
             "start": {"type": "string", "description": "ISO 8601 start datetime."},
             "end": {"type": "string", "description": "ISO 8601 end datetime."},
+            "description": {"type": "string"},
+            "rrule": {"type": "string", "description": "iCal RRULE string for recurrence (e.g. FREQ=WEEKLY;BYDAY=MO,WE,FR)"},
             "location": {"type": "string"},
         },
         "required": ["title", "start", "end"],
     },
 )
-async def create_event(title: str, start: str, end: str, location: str | None = None) -> str:
+async def create_event(title: str, start: str, end: str, description: str | None = None, rrule: str | None = None, location: str | None = None) -> str:
     try:
-        start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
-        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        start_dt = _normalize_dt(start)
+        end_dt = _normalize_dt(end)
     except ValueError:
         return f"Error: Invalid date format: start='{start}', end='{end}'"
 
@@ -95,6 +105,13 @@ async def create_event(title: str, start: str, end: str, location: str | None = 
     event.add("summary", title)
     event.add("dtstart", start_dt)
     event.add("dtend", end_dt)
+    if description:
+        event.add("description", description)
+    if rrule:
+        try:
+            event.add("rrule", rrule)
+        except ValueError:
+            return f"Error: Invalid RRULE string: '{rrule}'"
     if location:
         event.add("location", location)
     
@@ -103,5 +120,8 @@ async def create_event(title: str, start: str, end: str, location: str | None = 
     # Save to calendar
     calendar.save_event(ical.to_ical().decode("utf-8"))
     
+    parts = [f"'{title}'"]
+    if description:
+        parts.append(f"\"{description}\"")
     where = f" @ {location}" if location else ""
-    return f"Created event '{title}' {start}–{end}{where}."
+    return f"Created event {' '.join(parts)} {start}–{end}{where}."

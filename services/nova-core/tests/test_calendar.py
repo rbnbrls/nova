@@ -6,11 +6,15 @@ handling, and recurring-event expansion.
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
+from icalendar import Calendar as iCalendar
 
 from app.tools.calendar import create_event, list_events
+
+TZ = ZoneInfo("Europe/Amsterdam")
 
 
 def _make_caldav_mocks() -> tuple[MagicMock, MagicMock]:
@@ -131,12 +135,12 @@ async def test_list_events_in_date_range():
         assert "Lunch" in result
         assert "Clinic" in result
         # Verify expand=True was passed for recurring-event expansion
-        mock_calendar.search.assert_called_once_with(
-            start=datetime(2026, 7, 15, 0, 0, 0),
-            end=datetime(2026, 7, 15, 23, 59, 59),
-            event=True,
-            expand=True,
-        )
+        mock_calendar.search.assert_called_once()
+        call_kwargs = mock_calendar.search.call_args[1]
+        assert call_kwargs["start"] == datetime(2026, 7, 15, 0, 0, 0, tzinfo=TZ)
+        assert call_kwargs["end"] == datetime(2026, 7, 15, 23, 59, 59, tzinfo=TZ)
+        assert call_kwargs["event"] is True
+        assert call_kwargs["expand"] is True
 
 
 @pytest.mark.asyncio
@@ -211,6 +215,105 @@ async def test_create_event_with_z_suffix():
             "Global meeting",
             "2026-07-20T14:00:00Z",
             "2026-07-20T15:00:00Z",
+        )
+        assert "Created event" in result
+        mock_calendar.save_event.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 additions: description, timezone normalization, RRULE
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_event_with_description():
+    """Event with description includes it in response and VEVENT."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await create_event(
+            "Birthday party", "2026-08-01T18:00:00", "2026-08-01T23:00:00",
+            description="Bring gifts",
+        )
+        assert "Bring gifts" in result
+        mock_calendar.save_event.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_event_normalizes_naive_timestamp():
+    """Naive timestamps get household timezone assigned."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        await create_event("Test", "2026-07-15T10:00:00", "2026-07-15T11:00:00")
+        saved_ical = mock_calendar.save_event.call_args[0][0]
+        parsed = iCalendar.from_ical(saved_ical)
+        vevent = parsed.walk("VEVENT")[0]
+        dtstart = vevent["dtstart"].dt
+        assert dtstart.tzinfo is not None
+
+
+@pytest.mark.asyncio
+async def test_create_event_offset_timestamps_unchanged():
+    """Timestamps with explicit offset are accepted correctly."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await create_event("Test offset", "2026-07-15T10:00:00+02:00", "2026-07-15T11:00:00+02:00")
+        assert "Created event" in result
+        mock_calendar.save_event.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_list_events_normalizes_naive_timestamp():
+    """list_events normalizes naive timestamps before passing to search."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_calendar.search.return_value = []
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        await list_events("2026-07-15T00:00:00", "2026-07-15T23:59:59")
+        call_kwargs = mock_calendar.search.call_args[1]
+        assert call_kwargs["start"].tzinfo is not None
+
+
+@pytest.mark.asyncio
+async def test_create_event_with_rrule():
+    """RRULE parameter creates a VEVENT with RRULE property."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        await create_event(
+            "Standup", "2026-07-15T09:00:00", "2026-07-15T09:30:00",
+            rrule="FREQ=WEEKLY;BYDAY=MO,WE,FR",
+        )
+        saved_ical = mock_calendar.save_event.call_args[0][0]
+        parsed = iCalendar.from_ical(saved_ical)
+        vevent = parsed.walk("VEVENT")[0]
+        assert "RRULE" in vevent
+
+
+@pytest.mark.asyncio
+async def test_create_event_without_rrule_no_recurrence():
+    """No RRULE parameter means no RRULE in VEVENT."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        await create_event("Single meeting", "2026-07-15T14:00:00", "2026-07-15T15:00:00")
+        saved_ical = mock_calendar.save_event.call_args[0][0]
+        parsed = iCalendar.from_ical(saved_ical)
+        vevent = parsed.walk("VEVENT")[0]
+        assert "RRULE" not in vevent
+
+
+@pytest.mark.asyncio
+async def test_create_event_invalid_rrule_still_saves():
+    """An unusual RRULE string still saves (icalendar accepts it)."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await create_event(
+            "Bad rrule", "2026-07-15T10:00:00", "2026-07-15T11:00:00",
+            rrule="NOT A VALID RRULE",
         )
         assert "Created event" in result
         mock_calendar.save_event.assert_called_once()
