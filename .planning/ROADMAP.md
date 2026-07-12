@@ -459,11 +459,11 @@ Plans:
 5. Outbound messages use HTML parse mode; messages >4096 chars chunked at paragraph boundaries
 6. `NOVA_TELEGRAM_ENABLED` feature flag (default OFF) gates all Telegram behavior
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans complete
 
 Plans:
 
-- [ ] 20-01-PLAN.md — Rename config flag, implement webhook_router + register_webhooks, move _handle_telegram_command
+- [x] 20-01-PLAN.md — Rename config flag, implement webhook_router + register_webhooks, move _handle_telegram_command
 
 ---
 
@@ -482,7 +482,10 @@ Plans:
 3. Existing WhatsApp identity resolution continues to work through the multi-channel resolver — no regression
 4. Telegram's BIGINT `chat_id` stored losslessly as TEXT in `channel_identities.channel_id`
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 21-01-PLAN.md — Atomic last-active tracking + WhatsApp channel_identities backfill + unified resolver
 
 ---
 
@@ -869,7 +872,7 @@ Plans:
 | 17. Reliability Hardening | 1/1 | Complete    | 2026-07-12 |
 | 18. Security Hardening | 1/1 | Complete    | 2026-07-12 |
 | 19. Channel Adapter & Multi-Channel Schema | 1/1 | Complete    | 2026-07-12 |
-| 20. Telegram Bot Foundation | 0/0 | Not started | — |
+| 20. Telegram Bot Foundation | 1/1 | Complete    | 2026-07-12 |
 | 21. Multi-Channel Identity & Last-Active Tracking | 0/0 | Not started | — |
 | 22. Push Gateway Refactor | 0/0 | Not started | — |
 | 23. Telegram OTP Self-Service Linking | 0/0 | Not started | — |
