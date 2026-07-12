@@ -47,9 +47,10 @@ Plans:
 **Goal:** Users can chat with Nova directly from the dashboard — send a message and see Nova's reply without switching to WhatsApp or Telegram.
 **Requirements**: TBD
 **Depends on:** Phase 38
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 
 **Wave 1**
-- [ ] 39-01-PLAN.md — Backend endpoint (POST /dashboard/chat + Pydantic models + tests) + Frontend (HTML section + CSS styles + JS handlers)
+
+- [x] 39-01-PLAN.md — Backend endpoint (POST /dashboard/chat + Pydantic models + tests) + Frontend (HTML section + CSS styles + JS handlers)

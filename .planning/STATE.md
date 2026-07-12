@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: In Progress
-stopped_at: Completed 38-02-PLAN.md
-last_updated: "2026-07-12T18:53:34.347Z"
+stopped_at: Completed 39-01-PLAN.md
+last_updated: "2026-07-12T19:50:58.292Z"
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
   percent: 100
 current_phase: 38
 current_phase_name: Phase 38 — Subdomain and Email
@@ -24,7 +24,7 @@ See: `.planning/ROADMAP.md` (reorganized 2026-07-12)
 
 **Core value:** A private, fully local household assistant that Ruben & Méral can reach by text or voice, keeping a shared plan (tasks, calendar, important email) — reasoning and data never leave the house.
 
-**Current focus:** Phase 38 — subdomain and email
+**Current focus:** Phase 39 — Dashboard Chat Box
 
 ## Execution Order
 
@@ -271,12 +271,13 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 ### Roadmap Evolution
 
 - Phase 38 added: subdomain and email
+- Phase 39 added: add a input field for users to chat with nova on the /static/index.html page. Put the chat box in a column below the agenda.
 
 ## Session
 
-**Last session:** 2026-07-12T18:53:29.948Z
-**Stopped at:** Phase 38 context gathered
-**Resume file:** .planning/phases/38-subdomain-and-email/38-CONTEXT.md
+**Last session:** 2026-07-12T19:50:58.286Z
+**Stopped at:** Completed 39-01-PLAN.md
+**Resume file:** None
 
 ## Performance Metrics
 
@@ -284,3 +285,4 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 |-------|------|----------|-------|
 | Phase 38-subdomain-and-email P01 | 8min | 3 tasks | 3 files |
 | Phase 38-subdomain-and-email P03 | 11min | 3 tasks | 3 files |
+| Phase 39-add-a-input-field-for-users-to-chat-with-nova-on-the-static- P01 | 5 min | 2 tasks | 6 files |
