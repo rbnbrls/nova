@@ -12,8 +12,10 @@ from datetime import datetime
 import zoneinfo
 
 from . import llm, tools
+from .audit import record_tool_call
 from .config import settings
 
+_MAX_MUTATING_TOOLS = {"add_task", "complete_task", "create_event"}
 MAX_HISTORY_MESSAGES = 20
 
 _CONFIRM_WORDS = {"yes", "confirm", "ok", "okay", "yep", "ja", "sure", "approve"}
@@ -49,6 +51,22 @@ def _is_confirmed(user_message: str) -> bool:
     if tokens & _DENY_WORDS:
         return False
     return bool(tokens & _CONFIRM_WORDS) or "go ahead" in user_message.lower()
+
+
+def _summarize_action(name: str, args: dict, result: str = "") -> str:
+    """Produce a short human-readable summary of a tool invocation for the audit log."""
+    if name == "add_task":
+        assignee = args.get("assignee") or ""
+        title = args.get("title") or ""
+        return f"Added task '{title}' for {assignee}"
+    elif name == "complete_task":
+        title = args.get("title") or ""
+        return f"Completed task '{title}'"
+    elif name == "create_event":
+        title = args.get("title") or args.get("summary") or ""
+        return f"Created event '{title}'"
+    else:
+        return f"'{name}' with {json.dumps(args)}"
 
 
 async def run_agent(user_message: str, *, user: str, history: list[dict] | None = None) -> str:
@@ -98,10 +116,28 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
                                 confirmed = _is_confirmed(user_message)
 
                         if not confirmed:
+                            # Record denied confirmation before early return
+                            await record_tool_call(
+                                user_name=user,
+                                tool_name=fn_name,
+                                action_summary=_summarize_action(fn_name, args),
+                                status="denied",
+                                confirmation_required=True,
+                            )
                             title_info = args.get("title") or ""
                             return f"[CONFIRMATION_REQUIRED] Would you like me to proceed with {fn_name} for '{title_info}'?"
 
                     result = await tools.call_tool(fn["name"], args, user=user)
+
+                    # Record completed audit for mutating tools
+                    if fn["name"] in _MAX_MUTATING_TOOLS:
+                        await record_tool_call(
+                            user_name=user,
+                            tool_name=fn["name"],
+                            action_summary=_summarize_action(fn["name"], args, result),
+                            status="completed",
+                            confirmation_required=(fn["name"] in ("create_event", "complete_task")),
+                        )
                     messages.append({"role": "tool", "content": result})
     except TimeoutError:
         return "Sorry, I took too long to think about that. Could you try again?"
