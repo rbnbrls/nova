@@ -1,76 +1,107 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: Multi-Channel Support
-current_phase: 0
-status: Awaiting next milestone
-stopped_at: 4 files modified (db.py, 01_schema.sql, main.py, test_onboarding.py)
-last_updated: "2026-07-12T09:51:54.883Z"
-last_activity: 2026-07-12
-last_activity_desc: Milestone v3.0 completed and archived
+milestone: v1
+milestone_name: Foundation & Core Features
+status: Ready to plan
+last_updated: "2026-07-12T13:06:58.132Z"
 progress:
-  total_phases: 17
-  completed_phases: 5
-  total_plans: 9
-  completed_plans: 9
-  percent: 29
-current_phase_name: Telegram OTP Self-Service Linking
+  total_phases: 37
+  completed_phases: 12
+  total_plans: 13
+  completed_plans: 12
+  percent: 32
+stopped_at: null
+current_phase: 0
+current_phase_name: Phase 1 — CI/CD & Test Infrastructure
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-12)
+See: `.planning/ROADMAP.md` (reorganized 2026-07-12)
 
 **Core value:** A private, fully local household assistant that Ruben & Méral can reach by text or voice, keeping a shared plan (tasks, calendar, important email) — reasoning and data never leave the house.
-**Current focus:** Milestone v3.0 Multi-Channel Support — 5 phases roadmapped (13-17).
 
-## Current Position
+**Current focus:** ROADMAP.md entirely reorganized from scratch into 37 phases across 10 build tiers (Tier 0 Foundation → Tier 9 Advanced Features). All phases reset to Not Started.
 
-Phase: Milestone v3.0 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-12 — Milestone v3.0 completed and archived
+## Execution Order
 
-## Performance Metrics
+Phases execute in strict numeric order: 1 → 2 → ... → 37. Each phase depends on all prior phases.
 
-**Velocity:**
+### Tier 0: Foundation (P1-P3)
 
-- Total plans completed: 12 (Phases 1-12 complete from prior milestones)
-- Total execution time: ~7.5 hours
+  P1 — CI/CD & Test Infrastructure
+  P2 — Core Agent Loop & Tool Validation
+  P3 — Database Connection & Schema Foundation
 
-*Updated after each plan completion*
+### Tier 1: Tool Backends (P4-P8)
 
-## Accumulated Context
+  P4 — Task Management
+  P5 — Calendar Integration
+  P6 — Email Integration
+  P7 — Evaluation Suite
+  P8 — Write Confirmation Gate
 
-### Decisions
+### Tier 2: Channels (P9-P10)
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+  P9 — WhatsApp Channel
+  P10 — Voice Channel
 
-- v3.0 "Multi-Channel Support" roadmap created with 5 phases (13-17) continuing from Phase 12.
-- Phase order: Foundation (13) → Telegram Bot (14) → Identity/Last-Active (15) → Push Gateway (16) → Telegram OTP (17).
-- `NOVA_TELEGRAM_ENABLED` feature flag (default OFF) applies to Phases 14-17.
-- All DB migrations are additive-only — no destructive changes.
-- Existing WhatsApp tests serve as regression safety net after every phase.
-- ChannelAdapter ABC uses `-> None` for send_message (fire-and-forget, caller doesn't need delivery tracking). InboundMessage.raw_payload typed as Any for channel flexibility.
-- Skeleton modules use `TODO(Phase N)` pattern to clearly signal future ownership.
+### Tier 3: Proactive & UX (P11-P12)
 
-### Pending Todos
+  P11 — Proactive Scheduler
+  P12 — Read-Only Dashboard
 
-None yet.
+### Tier 4: User Management (P13-P16)
 
-### Blockers/Concerns
+  P13 — DB Preferences & Identity Migration
+  P14 — WhatsApp OTP Self-Service Linking
+  P15 — Per-User Dynamic Scheduling
+  P16 — Per-User Do Not Disturb
 
-- Phase 16 (Push Gateway Refactor) is the highest-risk phase — 5 scheduler call sites must be migrated without breaking existing notifications.
+### Tier 5: Reliability & Security (P17-P18)
 
-## Session Continuity
+  P17 — Reliability Hardening
+  P18 — Security Hardening
 
-Last session: 2026-07-12T09:08:00Z — Plan 13-01 complete (DB Schema Migrations)
-Stopped at: 4 files modified (db.py, 01_schema.sql, main.py, test_onboarding.py)
-Resume file: .planning/phases/13-foundation-db-schema-channel-adapter-skeleton/13-01-SUMMARY.md
+### Tier 6: Multi-Channel Infrastructure (P19-P22)
+
+  P19 — Channel Adapter & Multi-Channel Schema
+  P20 — Telegram Bot Foundation
+  P21 — Multi-Channel Identity & Last-Active Tracking
+  P22 — Push Gateway Refactor
+
+### Tier 7: Multi-Channel UX (P23-P25)
+
+  P23 — Telegram OTP Self-Service Linking
+  P24 — Telegram DND Queuing
+  P25 — Direct Telegram OTP Routing
+
+### Tier 8: Observability (P26-P29)
+
+  P26 — Agent-Run Tracing & Quality Alerts
+  P27 — User-Feedback → Incident Loop
+  P28 — Staging Lane & Model Upgrades
+  P29 — Scheduled Maintenance Agent
+
+### Tier 9: Advanced Features (P30-P37)
+
+  P30 — Speaker Identity on Voice
+  P31 — Per-Person Memory & Privacy Scopes
+  P32 — Household Coordination
+  P33 — Proactivity That Respects Attention
+  P34 — Deeper Email & Calendar Intelligence
+  P35 — Home Assistant as a Tool
+  P36 — Write-Action Audit Trail
+  P37 — Paper & Photo Intake
+
+## Reference Artifacts
+
+Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.planning/milestones/` for code verification reference. The actual codebase already implements features matching the old phase structure — verify each new phase's implementation status against the code during the discuss/plan phase.
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Begin with `/gsd-manager` to view the new dashboard
+- Start work on Phase 1: CI/CD & Test Infrastructure
+- Old milestone artifacts in `.planning/milestones/` serve as implementation reference

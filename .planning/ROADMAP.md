@@ -61,7 +61,8 @@ This roadmap is organized by build order: each phase depends on the phases befor
 **Plans**: 1 plan
 
 Plans:
-- [ ] 02-01-PLAN.md — Configurable iteration budget, auto-retry ONCE on tool errors, verification tests
+
+- [x] 02-01-PLAN.md — Configurable iteration budget, auto-retry ONCE on tool errors, verification tests
 
 ---
 
@@ -82,6 +83,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [ ] 03-01-PLAN.md — Alembic setup, initial migration from 01_schema.sql, db.py refactor to use Alembic, archive old SQL
 
 ---
@@ -125,7 +127,8 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 05-01-PLAN.md — Add timezone normalization, description param, and RRULE support to create_event/list_events
+
+- [x] 05-01-PLAN.md — Add timezone normalization, description param, and RRULE support to create_event/list_events
 
 ---
 
@@ -166,7 +169,8 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 07-01-PLAN.md — Add 4 new eval scenarios (calendar creation, task deadline, priority task, weather refusal) to test_evals.py following established mock pattern
+
+- [x] 07-01-PLAN.md — Add 4 new eval scenarios (calendar creation, task deadline, priority task, weather refusal) to test_evals.py following established mock pattern
 
 ---
 
@@ -209,6 +213,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [ ] 09-01-PLAN.md — Webhook endpoint tests, identity resolution edge cases, outbound message coverage
 
 ---
@@ -231,6 +236,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [ ] 10-01-PLAN.md — Voice channel test coverage: HA proxy endpoint tests + error handling for LLM/HA unavailability
 
 ---
@@ -787,9 +793,9 @@ Plans:
 | 8. Write Confirmation Gate | 0/0 | Not started | — |
 | 9. WhatsApp Channel | 0/0 | Not started | — |
 | 10. Voice Channel | 0/1 | Not started | — |
-| 11. Proactive Scheduler | 0/0 | Not started | — |
-| 12. Read-Only Dashboard | 0/0 | Not started | — |
-| 13. DB Preferences & Identity Migration | 0/0 | Not started | — |
+| 11. Proactive Scheduler | 1/1 | Complete    | 2026-07-12 |
+| 12. Read-Only Dashboard | 1/1 | Complete    | 2026-07-12 |
+| 13. DB Preferences & Identity Migration | 1/1 | Complete    | 2026-07-12 |
 | 14. WhatsApp OTP Self-Service Linking | 0/0 | Not started | — |
 | 15. Per-User Dynamic Scheduling | 0/0 | Not started | — |
 | 16. Per-User Do Not Disturb | 0/0 | Not started | — |
