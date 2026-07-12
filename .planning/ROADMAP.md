@@ -122,7 +122,10 @@ Plans:
 3. Timestamps with explicit UTC offsets are parsed correctly; naive timestamps normalized to household timezone
 4. Radicle service added to `docker-compose.yml`
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 05-01-PLAN.md — Add timezone normalization, description param, and RRULE support to create_event/list_events
 
 ---
 
@@ -160,7 +163,10 @@ Plans:
 3. Suite is discoverable by `pytest` and runs automatically as part of the standard test suite
 4. Scenarios are behavioral (test what the agent does, not which functions it calls)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 07-01-PLAN.md — Add 4 new eval scenarios (calendar creation, task deadline, priority task, weather refusal) to test_evals.py following established mock pattern
 
 ---
 
@@ -771,7 +777,7 @@ Plans:
 | 4. Task Management | 0/0 | Not started | — |
 | 5. Calendar Integration | 0/0 | Not started | — |
 | 6. Email Integration | 0/0 | Not started | — |
-| 7. Evaluation Suite | 0/0 | Not started | — |
+| 7. Evaluation Suite | 0/1 | Not started | — |
 | 8. Write Confirmation Gate | 0/0 | Not started | — |
 | 9. WhatsApp Channel | 0/0 | Not started | — |
 | 10. Voice Channel | 0/0 | Not started | — |
