@@ -485,7 +485,8 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 21-01-PLAN.md — Atomic last-active tracking + WhatsApp channel_identities backfill + unified resolver
+
+- [x] 21-01-PLAN.md — Atomic last-active tracking + WhatsApp channel_identities backfill + unified resolver
 
 ---
 
@@ -526,11 +527,12 @@ Plans:
 4. Existing linked user can re-link/replace with a new chat_id through the same flow
 5. Flow writes to `channel_identities` and updates `channels_enabled` to include 'telegram'
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans complete
 **UI hint**: yes
 
 Plans:
-- [ ] 23-01-PLAN.md — Telegram OTP self-service linking (send_telegram_otp, API endpoints, dashboard modal)
+
+- [x] 23-01-PLAN.md — Telegram OTP self-service linking (send_telegram_otp, API endpoints, dashboard modal)
 
 ---
 
@@ -739,6 +741,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
+
 - [ ] 32-01-PLAN.md — Grocery list tools + message relay tool
 - [ ] 32-02-PLAN.md — Recurring chores with rotation and fair-share nudges
 
@@ -882,7 +885,7 @@ Plans:
 | 20. Telegram Bot Foundation | 1/1 | Complete    | 2026-07-12 |
 | 21. Multi-Channel Identity & Last-Active Tracking | 0/0 | Not started | — |
 | 22. Push Gateway Refactor | 0/0 | Not started | — |
-| 23. Telegram OTP Self-Service Linking | 0/1 | In progress  | 2026-07-12 |
+| 23. Telegram OTP Self-Service Linking | 1/1 | Complete   | 2026-07-12 |
 | 24. Telegram DND Queuing | 0/0 | Not started | — |
 | 25. Direct Telegram OTP Routing | 0/0 | Not started | — |
 | 26. Agent-Run Tracing & Quality Alerts | 1/1 | Complete    | 2026-07-12 |

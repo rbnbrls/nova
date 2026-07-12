@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Ready to plan
-last_updated: "2026-07-12T15:45:30.000Z"
+last_updated: "2026-07-12T16:00:43.000Z"
 progress:
   total_phases: 37
   completed_phases: 28
   total_plans: 36
-  completed_plans: 33
-  percent: 76
+  completed_plans: 34
+  percent: 77
 stopped_at: null
 current_phase: 36
 current_phase_name: Phase 36 — Write-Action Audit Trail
@@ -174,6 +174,9 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 - NOVA_SERVICES fallback ensures backward compatibility (28-02)
 - Migration 0007 downgrade recreates whatsapp_verification_codes table exactly; safe rollback with zero data loss (zero rows in production) (19-01)
 
+- Migration `0009` used instead of `0008` for WhatsApp channel_identities backfill because `0008_create_grocery_items.py` already exists (21-01)
+- Telegram OTP path also wrapped in `conn.transaction()` for consistency when moving shared `attempts = 99` update into both branches (21-01)
+
 ### Last session
 
 **Started:** 2026-07-12T13:57:30Z
@@ -201,6 +204,13 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Completed:** 2026-07-12T15:44:35Z
 **Plans executed:** 1 (23-01)
 **Commits:** 0837e8a, 9b5f2a3, 1569d50
+
+### Session 2026-07-12T15:42:43Z
+
+**Started:** 2026-07-12T15:42:43Z
+**Completed:** 2026-07-12T16:00:43Z
+**Plans executed:** 1 (21-01)
+**Commits:** ca72b4d, 2dd7132
 
 ## Operator Next Steps
 
