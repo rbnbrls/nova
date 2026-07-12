@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.config import settings
+from app.llm import ChatResult
 from app.tools.email import (
     classify_importance,
     fetch_emails_from_graph,
@@ -52,14 +53,14 @@ async def test_classify_importance_keyword_preview():
 async def test_classify_importance_falls_back_to_llm():
     """EMAIL-01: Non-keyword emails fall back to LLM classification."""
     with patch("app.tools.email.llm.chat", new_callable=AsyncMock) as llm_mock:
-        llm_mock.return_value = {"content": "Yes"}
+        llm_mock.return_value = ChatResult(message={"content": "Yes"})
         result = await classify_importance(
             "Random flyer", "marketing@store.com", "Check out our deals"
         )
         assert result is True
         llm_mock.assert_called_once()
 
-        llm_mock.return_value = {"content": "No"}
+        llm_mock.return_value = ChatResult(message={"content": "No"})
         result = await classify_importance(
             "Spam offer", "spammer@bad.com", "You won a prize"
         )

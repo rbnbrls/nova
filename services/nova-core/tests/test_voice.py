@@ -30,7 +30,7 @@ class TestHAProxyEndpoint:
             data = resp.json()
             assert data["choices"][0]["message"]["content"] == "You have 3 tasks due today."
             assert data["model"]
-            mock_run.assert_called_once_with("What's on my calendar today?", user="household", history=[])
+            mock_run.assert_called_once_with("What's on my calendar today?", user="household", history=[], channel="api")
 
     @pytest.mark.skip(reason="Superceded by TestVoiceExistingRegression")
     def test_voice_query_user_attribution(self):
@@ -44,7 +44,7 @@ class TestHAProxyEndpoint:
                 json={"messages": [{"role": "user", "content": "Add milk to my shopping list"}]}
             )
             assert resp.status_code == 200
-            mock_run.assert_called_once_with("Add milk to my shopping list", user="Ruben", history=[])
+            mock_run.assert_called_once_with("Add milk to my shopping list", user="Ruben", history=[], channel="api")
 
     @pytest.mark.skip(reason="Superceded by TestVoiceExistingRegression")
     def test_voice_query_default_user_fallback(self):
@@ -58,7 +58,7 @@ class TestHAProxyEndpoint:
                 json={"messages": [{"role": "user", "content": "Hello"}]}
             )
             assert resp.status_code == 200
-            mock_run.assert_called_once_with("Hello", user="household", history=[])
+            mock_run.assert_called_once_with("Hello", user="household", history=[], channel="api")
 
     @pytest.mark.skip(reason="Superceded by TestVoiceExistingRegression")
     def test_voice_query_conversation_history(self):
@@ -84,7 +84,8 @@ class TestHAProxyEndpoint:
                 history=[
                     {"role": "user", "content": "What's my plan for today?"},
                     {"role": "assistant", "content": "You have a meeting at 2pm and a task to buy groceries."},
-                ]
+                ],
+                channel="api",
             )
 
 
@@ -148,7 +149,7 @@ class TestVoiceErrorHandling:
                 json={"messages": [{"role": "user", "content": ""}]}
             )
             assert resp.status_code == 200
-            mock_run.assert_called_once_with("", user="household", history=[])
+            mock_run.assert_called_once_with("", user="household", history=[], channel="api")
 
 
 class TestVoiceRoomResolution:
@@ -169,7 +170,7 @@ class TestVoiceRoomResolution:
                     json={"messages": [{"role": "user", "content": "What's on my plan?"}]}
                 )
                 assert resp.status_code == 200
-                mock_run.assert_called_once_with("What's on my plan?", user="Ruben", history=[])
+                mock_run.assert_called_once_with("What's on my plan?", user="Ruben", history=[], channel="api")
 
     def test_room_param_falls_back_to_household(self):
         from fastapi.testclient import TestClient
@@ -186,7 +187,7 @@ class TestVoiceRoomResolution:
                     json={"messages": [{"role": "user", "content": "Hello"}]}
                 )
                 assert resp.status_code == 200
-                mock_run.assert_called_once_with("Hello", user="household", history=[])
+                mock_run.assert_called_once_with("Hello", user="household", history=[], channel="api")
 
     def test_user_query_param_overrides_room(self):
         from fastapi.testclient import TestClient
@@ -203,7 +204,7 @@ class TestVoiceRoomResolution:
                 )
                 assert resp.status_code == 200
                 # Explicit user overrides room resolution
-                mock_run.assert_called_once_with("Add milk", user="Ruben", history=[])
+                mock_run.assert_called_once_with("Add milk", user="Ruben", history=[], channel="api")
 
     def test_room_without_query_uses_body_field(self):
         from fastapi.testclient import TestClient
@@ -223,7 +224,7 @@ class TestVoiceRoomResolution:
                     }
                 )
                 assert resp.status_code == 200
-                mock_run.assert_called_once_with("What's on my plan?", user="Meral", history=[])
+                mock_run.assert_called_once_with("What's on my plan?", user="Meral", history=[], channel="api")
 
 
 class TestVoiceWhoAmIIntent:
@@ -339,7 +340,7 @@ class TestVoiceExistingRegression:
                 data = resp.json()
                 assert data["choices"][0]["message"]["content"] == "You have 3 tasks due today."
                 assert data["model"]
-                mock_run.assert_called_once_with("What's on my calendar today?", user="household", history=[])
+                mock_run.assert_called_once_with("What's on my calendar today?", user="household", history=[], channel="api")
 
     def test_voice_query_user_attribution(self):
         from fastapi.testclient import TestClient
@@ -355,7 +356,7 @@ class TestVoiceExistingRegression:
                     json={"messages": [{"role": "user", "content": "Add milk to my shopping list"}]}
                 )
                 assert resp.status_code == 200
-                mock_run.assert_called_once_with("Add milk to my shopping list", user="Ruben", history=[])
+                mock_run.assert_called_once_with("Add milk to my shopping list", user="Ruben", history=[], channel="api")
 
     def test_voice_query_default_user_fallback(self):
         from fastapi.testclient import TestClient
@@ -371,7 +372,7 @@ class TestVoiceExistingRegression:
                     json={"messages": [{"role": "user", "content": "Hello"}]}
                 )
                 assert resp.status_code == 200
-                mock_run.assert_called_once_with("Hello", user="household", history=[])
+                mock_run.assert_called_once_with("Hello", user="household", history=[], channel="api")
 
     def test_voice_query_conversation_history(self):
         from fastapi.testclient import TestClient
@@ -399,7 +400,8 @@ class TestVoiceExistingRegression:
                     history=[
                         {"role": "user", "content": "What's my plan for today?"},
                         {"role": "assistant", "content": "You have a meeting at 2pm and a task to buy groceries."},
-                    ]
+                    ],
+                    channel="api",
                 )
 
     def test_voice_llm_unavailable_returns_friendly_fallback(self):
@@ -467,4 +469,4 @@ class TestVoiceExistingRegression:
                     json={"messages": [{"role": "user", "content": ""}]}
                 )
                 assert resp.status_code == 200
-                mock_run.assert_called_once_with("", user="household", history=[])
+                mock_run.assert_called_once_with("", user="household", history=[], channel="api")

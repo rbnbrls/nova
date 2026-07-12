@@ -313,7 +313,7 @@ async def process_incoming_whatsapp(payload: dict):
             )
             return
 
-    reply = await run_agent(text, user=user.name)
+    reply = await run_agent(text, user=user.name, channel="whatsapp")
     await send_whatsapp_message(sender, reply)
 
 

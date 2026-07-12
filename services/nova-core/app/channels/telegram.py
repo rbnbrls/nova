@@ -188,7 +188,7 @@ async def process_incoming_telegram(payload: dict):
     except Exception as e:
         print(f"[ERROR] Failed to update last_inbound_at: {e}")
 
-    reply = await run_agent(text, user=user.name)
+    reply = await run_agent(text, user=user.name, channel="telegram")
     await _send_to_chat_id(chat_id, reply, proactive=False, user_name=user.name)
 
 

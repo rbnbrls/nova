@@ -170,7 +170,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request, user: s
         resolved_user = await voice_room_manager.get_active_user(resolved_room)
 
     try:
-        reply = await run_agent(last, user=resolved_user, history=history)
+        reply = await run_agent(last, user=resolved_user, history=history, channel="api")
     except Exception as e:
         print(f"[ERROR] Agent loop failed: {e}")
         reply = "Nova is having trouble right now, please try again later."

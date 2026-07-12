@@ -87,7 +87,7 @@ def test_chat_completions_user_query_parameter():
             json={"messages": [{"role": "user", "content": "Hello"}], "user": "Ruben"}
         )
         assert resp.status_code == 200
-        mock_run.assert_called_once_with("Hello", user="Meral", history=[])
+        mock_run.assert_called_once_with("Hello", user="Meral", history=[], channel="api")
         mock_run.reset_mock()
         
         # 2. Body user specified, no query parameter
@@ -96,7 +96,7 @@ def test_chat_completions_user_query_parameter():
             json={"messages": [{"role": "user", "content": "Hello"}], "user": "Ruben"}
         )
         assert resp.status_code == 200
-        mock_run.assert_called_once_with("Hello", user="Ruben", history=[])
+        mock_run.assert_called_once_with("Hello", user="Ruben", history=[], channel="api")
         mock_run.reset_mock()
         
         # 3. No user specified
@@ -105,7 +105,7 @@ def test_chat_completions_user_query_parameter():
             json={"messages": [{"role": "user", "content": "Hello"}]}
         )
         assert resp.status_code == 200
-        mock_run.assert_called_once_with("Hello", user="household", history=[])
+        mock_run.assert_called_once_with("Hello", user="household", history=[], channel="api")
 
 
 @pytest.mark.asyncio

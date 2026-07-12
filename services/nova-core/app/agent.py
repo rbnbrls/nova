@@ -7,14 +7,16 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 
-from datetime import datetime
+from datetime import datetime, timezone
 import zoneinfo
 
 from . import llm, tools
 from .audit import record_tool_call
 from .config import settings
 from .db import get_user_memories
+from .tracer import AgentTrace, emit_trace
 
 _MAX_MUTATING_TOOLS = {"add_task", "complete_task", "create_event", "ha_call_service", "remember", "forget"}
 MAX_HISTORY_MESSAGES = 20
@@ -82,11 +84,23 @@ def _summarize_action(name: str, args: dict, result: str = "") -> str:
         return f"'{name}' with {json.dumps(args)}"
 
 
-async def run_agent(user_message: str, *, user: str, history: list[dict] | None = None) -> str:
+async def run_agent(
+    user_message: str,
+    *,
+    user: str,
+    history: list[dict] | None = None,
+    channel: str = "api",
+) -> str:
     """Run one turn: returns Nova's final text reply.
 
-    `history` is a list of prior {role, content} messages (short-term memory).
+    ``history`` is a list of prior {role, content} messages (short-term memory).
+    ``channel`` identifies the source channel for tracing (api/whatsapp/telegram/voice).
     """
+    _start = time.monotonic()
+    _tool_records: list[dict] = []
+    _errors: list[dict] = []
+    _total_tokens = 0
+
     tz = zoneinfo.ZoneInfo(settings.nova_timezone)
     now_str = datetime.now(tz).isoformat()
 
@@ -105,12 +119,22 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
 
     try:
         async with asyncio.timeout(settings.nova_max_turn_timeout):
-            for _ in range(settings.nova_max_iterations):
+            for iteration in range(1, settings.nova_max_iterations + 1):
                 result = await llm.chat(messages, tools=specs)
                 messages.append(result.message)
+                _total_tokens += result.prompt_tokens + result.completion_tokens
 
                 tool_calls = result.message.get("tool_calls")
                 if not tool_calls:
+                    _latency = int((time.monotonic() - _start) * 1000)
+                    if settings.nova_tracing_enabled:
+                        asyncio.create_task(emit_trace(AgentTrace(
+                            channel=channel, user=user, latency_ms=_latency,
+                            token_count=_total_tokens, tool_calls=_tool_records,
+                            errors=_errors, iteration_count=iteration,
+                            got_stuck=False,
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                        )))
                     return (result.message.get("content") or "").strip()
 
                 # Execute each requested tool and feed results back to the model.
@@ -136,6 +160,7 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
 
                         if not confirmed:
                             # Record denied confirmation before early return
+                            _tool_records.append({"name": fn_name, "status": "denied", "duration_ms": 0})
                             await record_tool_call(
                                 user_name=user,
                                 tool_name=fn_name,
@@ -143,10 +168,30 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
                                 status="denied",
                                 confirmation_required=True,
                             )
+                            _latency = int((time.monotonic() - _start) * 1000)
+                            if settings.nova_tracing_enabled:
+                                asyncio.create_task(emit_trace(AgentTrace(
+                                    channel=channel, user=user, latency_ms=_latency,
+                                    token_count=_total_tokens, tool_calls=_tool_records,
+                                    errors=_errors, iteration_count=iteration,
+                                    got_stuck=False,
+                                    timestamp=datetime.now(timezone.utc).isoformat(),
+                                )))
                             detail = args.get("title") or args.get("content_pattern") or ""
                             return f"[CONFIRMATION_REQUIRED] Would you like me to proceed with {fn_name} for '{detail}'?"
 
-                    result = await tools.call_tool(fn["name"], args, user=user)
+                    _tc_start = time.monotonic()
+                    try:
+                        result = await tools.call_tool(fn["name"], args, user=user)
+                        _tc_dur = int((time.monotonic() - _tc_start) * 1000)
+                        _tool_records.append({"name": fn_name, "status": "completed", "duration_ms": _tc_dur})
+                    except Exception as e:
+                        _tc_dur = int((time.monotonic() - _tc_start) * 1000)
+                        err_msg = str(e)[:300]
+                        _tool_records.append({"name": fn_name, "status": "error", "duration_ms": _tc_dur})
+                        _errors.append({"tool": fn_name, "error": err_msg})
+                        # Re-raise the exception to let the outer handler process it
+                        raise
 
                     # Record completed audit for mutating tools
                     if fn["name"] in _MAX_MUTATING_TOOLS:
@@ -159,7 +204,41 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
                         )
                     messages.append({"role": "tool", "content": result})
     except TimeoutError:
+        _latency = int((time.monotonic() - _start) * 1000)
+        if settings.nova_tracing_enabled:
+            _errors.append({"tool": "agent", "error": "nova_max_turn_timeout reached"})
+            asyncio.create_task(emit_trace(AgentTrace(
+                channel=channel, user=user, latency_ms=_latency,
+                token_count=_total_tokens, tool_calls=_tool_records,
+                errors=_errors, iteration_count=iteration if 'iteration' in dir() else settings.nova_max_iterations,
+                got_stuck=False,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )))
         return "Sorry, I took too long to think about that. Could you try again?"
 
-    return "Sorry, I got stuck working on that — could you rephrase?"
+    except Exception:
+        _latency = int((time.monotonic() - _start) * 1000)
+        if settings.nova_tracing_enabled:
+            asyncio.create_task(emit_trace(AgentTrace(
+                channel=channel, user=user, latency_ms=_latency,
+                token_count=_total_tokens, tool_calls=_tool_records,
+                errors=_errors, iteration_count=settings.nova_max_iterations,
+                got_stuck=False,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )))
+        raise
 
+    # "Got stuck" — max iterations exhausted
+    _latency = int((time.monotonic() - _start) * 1000)
+    if settings.nova_tracing_enabled:
+        if not _errors:
+            _errors.append({"tool": "agent", "error": "nova_max_iterations reached without final answer"})
+        asyncio.create_task(emit_trace(AgentTrace(
+            channel=channel, user=user, latency_ms=_latency,
+            token_count=_total_tokens, tool_calls=_tool_records,
+            errors=_errors, iteration_count=settings.nova_max_iterations,
+            got_stuck=True,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )))
+
+    return "Sorry, I got stuck working on that — could you rephrase?"
