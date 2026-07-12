@@ -10,3 +10,5 @@ apscheduler==3.10.4
 alembic==1.14.1
 psycopg2-binary==2.9.10
 pip-audit==2.7.3
+aioimaplib==2.0.1
+aiosmtplib==5.1.2
