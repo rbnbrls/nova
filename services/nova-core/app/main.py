@@ -28,7 +28,7 @@ from .agent import run_agent
 from .config import settings
 from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest
 from .security import verify_whatsapp_signature
-from .whatsapp import process_incoming_whatsapp
+from .channels.whatsapp import process_incoming_whatsapp
 from .tools.calendar import _get_calendar
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -244,7 +244,7 @@ async def get_preferences():
 async def request_code(req: RequestCodeRequest):
     import random
     from datetime import datetime, timezone, timedelta
-    from .whatsapp import send_whatsapp_message
+    from .channels.whatsapp import send_whatsapp_message
     
     clean_number = req.number.strip().lstrip("+")
     if not clean_number.isdigit() or len(clean_number) < 8:

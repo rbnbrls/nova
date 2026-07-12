@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from app.whatsapp import send_whatsapp_message, process_incoming_whatsapp
+from app.channels.whatsapp import send_whatsapp_message, process_incoming_whatsapp
 from app.scheduler import check_new_emails
 from app import identity
 
@@ -28,9 +28,9 @@ async def test_inbound_updates_last_inbound_at():
     mock_pool = MagicMock()
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
     
-    with patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
-         patch("app.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
-         patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+    with patch("app.channels.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
+         patch("app.channels.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
+         patch("app.channels.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
          patch("app.identity.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
         mock_get_pool.return_value = mock_pool
@@ -58,8 +58,8 @@ async def test_outbound_whatsapp_compliance_checks():
     mock_pool_old.acquire.return_value.__aenter__.return_value = mock_conn_old
     
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
-         patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
-         patch("app.whatsapp.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
+         patch("app.channels.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.channels.whatsapp.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
         mock_resolve.return_value = identity.User(name="Ruben")
         mock_get_pool.return_value = mock_pool_old
@@ -83,8 +83,8 @@ async def test_outbound_whatsapp_compliance_checks():
     mock_pool_new.acquire.return_value.__aenter__.return_value = mock_conn_new
     
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
-         patch("app.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
-         patch("app.whatsapp.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
+         patch("app.channels.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.channels.whatsapp.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
         mock_resolve.return_value = identity.User(name="Ruben")
         mock_get_pool.return_value = mock_pool_new

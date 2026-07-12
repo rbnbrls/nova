@@ -70,7 +70,7 @@ def test_whatsapp_webhook_valid_signature():
 @pytest.mark.asyncio
 async def test_webhook_unrecognized_number_refusal():
     from unittest.mock import AsyncMock, patch
-    from app.whatsapp import process_incoming_whatsapp
+    from app.channels.whatsapp import process_incoming_whatsapp
     from app import identity
     
     payload = {
@@ -86,8 +86,8 @@ async def test_webhook_unrecognized_number_refusal():
         }]
     }
     
-    with patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
-         patch("app.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
+    with patch("app.channels.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
+         patch("app.channels.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
          patch("app.identity.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
         mock_resolve.return_value = identity.HOUSEHOLD
@@ -102,7 +102,7 @@ async def test_webhook_unrecognized_number_refusal():
 @pytest.mark.asyncio
 async def test_webhook_authorized_number_success():
     from unittest.mock import AsyncMock, patch
-    from app.whatsapp import process_incoming_whatsapp
+    from app.channels.whatsapp import process_incoming_whatsapp
     from app import identity
     
     payload = {
@@ -118,8 +118,8 @@ async def test_webhook_authorized_number_success():
         }]
     }
     
-    with patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
-         patch("app.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
+    with patch("app.channels.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
+         patch("app.channels.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
          patch("app.identity.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve:
          
         mock_resolve.return_value = identity.User(name="Ruben")

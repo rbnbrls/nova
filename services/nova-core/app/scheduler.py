@@ -6,7 +6,7 @@ import zoneinfo
 
 from .config import settings
 from .db import get_pool
-from .whatsapp import send_whatsapp_message
+from .channels.whatsapp import send_whatsapp_message
 from .tools.calendar import _get_calendar
 from .tools.email import fetch_emails_from_graph, classify_importance
 
