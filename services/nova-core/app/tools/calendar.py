@@ -125,3 +125,51 @@ async def create_event(title: str, start: str, end: str, description: str | None
         parts.append(f"\"{description}\"")
     where = f" @ {location}" if location else ""
     return f"Created event {' '.join(parts)} {start}–{end}{where}."
+
+
+async def is_user_busy() -> bool:
+    """Check if the household calendar has a busy event right now.
+
+    Returns True if the current local time falls within any event's
+    start/end range. Reuses the existing CalDAV connection pattern.
+    Uses 'household' as default since the calendar is shared.
+    """
+    import zoneinfo
+    from datetime import datetime, timezone, timedelta
+    from ..config import settings
+
+    tz = zoneinfo.ZoneInfo(settings.nova_timezone)
+    now_local = datetime.now(tz)
+    five_min_ago = now_local - timedelta(minutes=5)
+
+    try:
+        calendar = _get_calendar()
+        events = calendar.search(
+            start=five_min_ago,
+            end=now_local + timedelta(hours=2),
+            event=True, expand=True
+        )
+        for ev in events:
+            try:
+                vevent = ev.vobject_instance.vevent
+                dtstart = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
+                dtend = vevent.dtend.value if hasattr(vevent, "dtend") else None
+
+                if not dtstart or not dtend:
+                    continue
+
+                # Normalize to datetime
+                if not isinstance(dtstart, datetime):
+                    continue
+                if not isinstance(dtend, datetime):
+                    dtend = datetime.combine(dtend, datetime.max.time(), tzinfo=tz)
+
+                # Check if current time is within event bounds
+                if dtstart <= now_local <= dtend:
+                    return True
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"[ERROR] is_user_busy calendar query failed: {e}")
+        return False  # Be conservative: if we can't check, don't block
+    return False

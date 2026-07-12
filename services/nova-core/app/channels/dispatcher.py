@@ -32,6 +32,45 @@ async def send_to_user(user_name: str, text: str, proactive: bool = True) -> Non
             return
         last_channel = row["last_active_channel"] or "whatsapp"
 
+    # DND check: gate all proactive sends before routing to channel adapter
+    if proactive:
+        from ..identity import is_user_in_dnd
+        in_dnd = await is_user_in_dnd(user_name)
+        if in_dnd:
+            print(f"[DND ACTIVE] Queuing proactive message for {user_name} (channel: {last_channel})")
+            async with pool.acquire() as conn:
+                user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", user_name)
+                if user_id:
+                    channel_id = None
+                    if last_channel == "telegram":
+                        channel_id = await conn.fetchval(
+                            "SELECT channel_id FROM channel_identities WHERE channel = 'telegram' AND user_id = $1",
+                            user_id
+                        )
+                    elif last_channel == "whatsapp":
+                        channel_id = await conn.fetchval(
+                            "SELECT whatsapp_number FROM user_preferences WHERE user_id = $1",
+                            user_id
+                        )
+                    await conn.execute(
+                        """INSERT INTO queued_notifications (user_id, whatsapp_number, message_text, channel)
+                           VALUES ($1, $2, $3, $4)""",
+                        user_id, channel_id or "", text, last_channel
+                    )
+            return
+
+    # Calendar-awareness gate: suppress proactive sends during meetings
+    if proactive:
+        try:
+            from ..tools.calendar import is_user_busy
+            busy = await is_user_busy()
+            if busy:
+                print(f"[CALENDAR AWARE] Suppressing proactive message for {user_name} — user is in a meeting")
+                # Do NOT queue — meetings are transient; deliver next scheduled tick
+                return
+        except Exception:
+            pass  # If calendar check fails, deliver anyway
+
     if last_channel == "telegram":
         async with pool.acquire() as conn:
             has_telegram = await conn.fetchval(
