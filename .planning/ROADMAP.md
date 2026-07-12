@@ -438,7 +438,7 @@ Plans:
 
 Plans:
 
-- [ ] 19-01-PLAN.md — Drop dead whatsapp_verification_codes table, formalize ChannelAdapter ABC with register_webhooks, verify SCs, update webhook_router skeleton
+- [x] 19-01-PLAN.md — Drop dead whatsapp_verification_codes table, formalize ChannelAdapter ABC with register_webhooks, verify SCs, update webhook_router skeleton
 
 ---
 
@@ -459,7 +459,11 @@ Plans:
 5. Outbound messages use HTML parse mode; messages >4096 chars chunked at paragraph boundaries
 6. `NOVA_TELEGRAM_ENABLED` feature flag (default OFF) gates all Telegram behavior
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+
+- [ ] 20-01-PLAN.md — Rename config flag, implement webhook_router + register_webhooks, move _handle_telegram_command
 
 ---
 
@@ -603,8 +607,9 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 27-01-PLAN.md — Feedback core module (detection, context capture, redaction, Forgejo issue filing)
-- [ ] 27-02-PLAN.md — Agent loop + WhatsApp integration (text/reaction triggers, context capture wiring)
+
+- [x] 27-01-PLAN.md — Feedback core module (detection, context capture, redaction, Forgejo issue filing)
+- [x] 27-02-PLAN.md — Agent loop + WhatsApp integration (text/reaction triggers, context capture wiring)
 
 ---
 
@@ -622,11 +627,12 @@ Plans:
 2. Coolify deploys to staging first; promotion to prod requires tests green + evals above threshold
 3. Staging can benchmark new models side-by-side with before/after eval reports
 
-**Plans**: 2 plans
+**Plans**: 2/2 plans complete
 
 Plans:
-- [ ] 28-01-PLAN.md — Staging compose profile: docker-compose.staging.yml, shared network, DB schema setup
-- [ ] 28-02-PLAN.md — Promotion gate & ops pipeline: promote.sh, deploy.sh staging-first, benchmark workflow docs
+
+- [x] 28-01-PLAN.md — Staging compose profile: docker-compose.staging.yml, shared network, DB schema setup
+- [x] 28-02-PLAN.md — Promotion gate & ops pipeline: promote.sh, deploy.sh staging-first, benchmark workflow docs
 
 ---
 
@@ -862,7 +868,7 @@ Plans:
 | 16. Per-User Do Not Disturb | 0/0 | Not started | — |
 | 17. Reliability Hardening | 1/1 | Complete    | 2026-07-12 |
 | 18. Security Hardening | 1/1 | Complete    | 2026-07-12 |
-| 19. Channel Adapter & Multi-Channel Schema | 0/1 | Not started | — |
+| 19. Channel Adapter & Multi-Channel Schema | 1/1 | Complete    | 2026-07-12 |
 | 20. Telegram Bot Foundation | 0/0 | Not started | — |
 | 21. Multi-Channel Identity & Last-Active Tracking | 0/0 | Not started | — |
 | 22. Push Gateway Refactor | 0/0 | Not started | — |
@@ -870,8 +876,8 @@ Plans:
 | 24. Telegram DND Queuing | 0/0 | Not started | — |
 | 25. Direct Telegram OTP Routing | 0/0 | Not started | — |
 | 26. Agent-Run Tracing & Quality Alerts | 1/1 | Complete    | 2026-07-12 |
-| 27. User-Feedback → Incident Loop | 0/0 | Not started | — |
-| 28. Staging Lane & Model Upgrades | 0/2 | Planned    | — |
+| 27. User-Feedback → Incident Loop | 2/2 | Complete    | 2026-07-12 |
+| 28. Staging Lane & Model Upgrades | 2/2 | Complete    | 2026-07-12 |
 | 29. Scheduled Maintenance Agent | 3/3 | Complete    | 2026-07-12 |
 | 30. Speaker Identity on Voice | 2/2 | Complete    | 2026-07-12 |
 | 31. Per-Person Memory & Privacy Scopes | 1/1 | Complete    | 2026-07-12 |
