@@ -277,13 +277,14 @@ async def request_code(req: RequestCodeRequest):
         
         await conn.execute(
             """
-            INSERT INTO whatsapp_verification_codes (user_id, whatsapp_number, code, expires_at)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO channel_verification_codes (user_id, whatsapp_number, code, expires_at, channel)
+            VALUES ($1, $2, $3, $4, $5)
             """,
             user_id,
             clean_number,
             code,
-            expires_at
+            expires_at,
+            "whatsapp"
         )
 
     otp_message = f"Your Nova verification code is {code}. It expires in 10 minutes."
@@ -309,7 +310,7 @@ async def verify_code(req: VerifyCodeRequest):
         row = await conn.fetchrow(
             """
             SELECT id, whatsapp_number, code, attempts, expires_at
-            FROM whatsapp_verification_codes
+            FROM channel_verification_codes
             WHERE user_id = $1 AND attempts < 3 AND expires_at > now()
             ORDER BY created_at DESC
             LIMIT 1
@@ -324,7 +325,7 @@ async def verify_code(req: VerifyCodeRequest):
             raise HTTPException(status_code=400, detail="Verification code has been blocked due to too many attempts")
             
         await conn.execute(
-            "UPDATE whatsapp_verification_codes SET attempts = attempts + 1 WHERE id = $1",
+            "UPDATE channel_verification_codes SET attempts = attempts + 1 WHERE id = $1",
             row["id"]
         )
         
@@ -342,7 +343,7 @@ async def verify_code(req: VerifyCodeRequest):
         )
         
         await conn.execute(
-            "UPDATE whatsapp_verification_codes SET attempts = 99 WHERE id = $1",
+            "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
             row["id"]
         )
         
