@@ -318,7 +318,11 @@ Plans:
 4. Claiming a number already linked to another user is rejected, not silently reassigned
 5. Existing linked user can re-link/replace through the same flow
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 14-01-PLAN.md — WhatsApp OTP self-service linking (AUTHENTICATION template, API endpoints, dashboard modal)
+
 **UI hint**: yes
 
 ---
@@ -796,7 +800,7 @@ Plans:
 | 11. Proactive Scheduler | 1/1 | Complete    | 2026-07-12 |
 | 12. Read-Only Dashboard | 1/1 | Complete    | 2026-07-12 |
 | 13. DB Preferences & Identity Migration | 1/1 | Complete    | 2026-07-12 |
-| 14. WhatsApp OTP Self-Service Linking | 0/0 | Not started | — |
+| 14. WhatsApp OTP Self-Service Linking | 0/1 | Not started | — |
 | 15. Per-User Dynamic Scheduling | 0/0 | Not started | — |
 | 16. Per-User Do Not Disturb | 0/0 | Not started | — |
 | 17. Reliability Hardening | 0/0 | Not started | — |
