@@ -407,10 +407,11 @@ Plans:
 2. A request with a valid auth header is processed normally — legitimate channels unaffected
 3. ops-bridge compares `X-Bridge-Token` via `hmac.compare_digest` — constant time, not variable-length comparison
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans complete
 
 Plans:
-- [ ] 18-01-PLAN.md — Verify auth ordering, add regression-proof tests, confirm ops-bridge constant-time comparison
+
+- [x] 18-01-PLAN.md — Verify auth ordering, add regression-proof tests, confirm ops-bridge constant-time comparison
 
 ---
 
@@ -575,7 +576,8 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 26-01-PLAN.md — Tracer module, agent-loop instrumentation, channel propagation, alert routing config
+
+- [x] 26-01-PLAN.md — Tracer module, agent-loop instrumentation, channel propagation, alert routing config
 
 ---
 
@@ -594,7 +596,11 @@ Plans:
 3. Filed issues contain enough context (user, turn, tool calls, model response) to reproduce
 4. Issues are tagged appropriately and become candidates for the eval suite
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 27-01-PLAN.md — Feedback core module (detection, context capture, redaction, Forgejo issue filing)
+- [ ] 27-02-PLAN.md — Agent loop + WhatsApp integration (text/reaction triggers, context capture wiring)
 
 ---
 
@@ -687,7 +693,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 31-01-PLAN.md — Backend: schema, tools, agent/briefing integration
+
+- [x] 31-01-PLAN.md — Backend: schema, tools, agent/briefing integration
 - [ ] 31-02-PLAN.md — Dashboard memory browser API endpoints + frontend UI
 
 **UI hint**: yes
@@ -846,7 +853,7 @@ Plans:
 | 15. Per-User Dynamic Scheduling | 0/0 | Not started | — |
 | 16. Per-User Do Not Disturb | 0/0 | Not started | — |
 | 17. Reliability Hardening | 1/1 | Complete    | 2026-07-12 |
-| 18. Security Hardening | 0/1 | In progress | — |
+| 18. Security Hardening | 1/1 | Complete    | 2026-07-12 |
 | 19. Channel Adapter & Multi-Channel Schema | 0/0 | Not started | — |
 | 20. Telegram Bot Foundation | 0/0 | Not started | — |
 | 21. Multi-Channel Identity & Last-Active Tracking | 0/0 | Not started | — |
@@ -854,12 +861,12 @@ Plans:
 | 23. Telegram OTP Self-Service Linking | 0/0 | Not started | — |
 | 24. Telegram DND Queuing | 0/0 | Not started | — |
 | 25. Direct Telegram OTP Routing | 0/0 | Not started | — |
-| 26. Agent-Run Tracing & Quality Alerts | 0/0 | Not started | — |
+| 26. Agent-Run Tracing & Quality Alerts | 1/1 | Complete    | 2026-07-12 |
 | 27. User-Feedback → Incident Loop | 0/0 | Not started | — |
 | 28. Staging Lane & Model Upgrades | 0/0 | Not started | — |
 | 29. Scheduled Maintenance Agent | 3/3 | Complete    | 2026-07-12 |
 | 30. Speaker Identity on Voice | 2/2 | Complete    | 2026-07-12 |
-| 31. Per-Person Memory & Privacy Scopes | 0/0 | Not started | — |
+| 31. Per-Person Memory & Privacy Scopes | 1/1 | Complete    | 2026-07-12 |
 | 32. Household Coordination | 0/0 | Not started | — |
 | 33. Proactivity That Respects Attention | 0/0 | Not started | — |
 | 34. Deeper Email & Calendar Intelligence | 0/0 | Not started | — |
