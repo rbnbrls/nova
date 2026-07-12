@@ -35,3 +35,14 @@ class ChatCompletionResponse(BaseModel):
     created: int = Field(default_factory=lambda: int(time.time()))
     model: str
     choices: list[Choice]
+
+
+class RequestCodeRequest(BaseModel):
+    user: str
+    number: str
+
+
+class VerifyCodeRequest(BaseModel):
+    user: str
+    code: str
+

@@ -157,3 +157,146 @@ function updateEvents(events) {
     
     container.innerHTML = html;
 }
+
+
+// --- Preferences & Onboarding Settings ---
+let preferencesCache = {};
+let activeSettingsUser = 'Ruben';
+
+async function fetchPreferences() {
+    try {
+        const resp = await fetch('/api/preferences');
+        if (resp.ok) {
+            preferencesCache = await resp.json();
+            updateSettingsUI();
+        }
+    } catch (err) {
+        console.error('Failed to fetch preferences:', err);
+    }
+}
+
+function updateSettingsUI() {
+    const userPrefs = preferencesCache[activeSettingsUser] || { whatsapp_number: '' };
+    const linkedVal = document.getElementById('linked-number-val');
+    const phoneInput = document.getElementById('phone-input');
+    
+    if (linkedVal) {
+        linkedVal.textContent = userPrefs.whatsapp_number ? '+' + userPrefs.whatsapp_number : 'None Linked';
+    }
+    if (phoneInput && document.getElementById('verify-code-row').classList.contains('hidden')) {
+        phoneInput.value = userPrefs.whatsapp_number || '';
+    }
+}
+
+// User tab switching
+document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', (e) => {
+        document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        activeSettingsUser = tab.getAttribute('data-user');
+        
+        // Reset verify view
+        cancelVerifyState();
+        updateSettingsUI();
+    });
+});
+
+function showMsg(text, isError = false) {
+    const msgDiv = document.getElementById('settings-msg');
+    if (msgDiv) {
+        msgDiv.textContent = text;
+        msgDiv.className = isError ? 'settings-message error' : 'settings-message success';
+        msgDiv.style.display = 'block';
+    }
+}
+
+function clearMsg() {
+    const msgDiv = document.getElementById('settings-msg');
+    if (msgDiv) {
+        msgDiv.textContent = '';
+        msgDiv.style.display = 'none';
+    }
+}
+
+function cancelVerifyState() {
+    document.getElementById('verify-code-row').classList.add('hidden');
+    document.getElementById('request-code-row').classList.remove('hidden');
+    document.getElementById('code-input').value = '';
+    clearMsg();
+}
+
+// Request verification code button click
+const btnRequestCode = document.getElementById('btn-request-code');
+if (btnRequestCode) {
+    btnRequestCode.addEventListener('click', async () => {
+        clearMsg();
+        const number = document.getElementById('phone-input').value.trim();
+        if (!number) {
+            showMsg('Please enter a WhatsApp phone number', true);
+            return;
+        }
+        
+        try {
+            const resp = await fetch('/api/preferences/request-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user: activeSettingsUser, number: number })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                showMsg('Verification code sent successfully!');
+                document.getElementById('request-code-row').classList.add('hidden');
+                document.getElementById('verify-code-row').classList.remove('hidden');
+            } else {
+                showMsg(data.detail || 'Failed to request verification code', true);
+            }
+        } catch (err) {
+            showMsg('Network error requesting verification code', true);
+        }
+    });
+}
+
+// Verify and Link button click
+const btnVerifyCode = document.getElementById('btn-verify-code');
+if (btnVerifyCode) {
+    btnVerifyCode.addEventListener('click', async () => {
+        clearMsg();
+        const code = document.getElementById('code-input').value.trim();
+        if (!code) {
+            showMsg('Please enter the 6-digit code', true);
+            return;
+        }
+        
+        try {
+            const resp = await fetch('/api/preferences/verify-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user: activeSettingsUser, code: code })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                showMsg(`Successfully linked +${data.linked_number}!`);
+                setTimeout(() => {
+                    cancelVerifyState();
+                    fetchPreferences();
+                }, 2000);
+            } else {
+                showMsg(data.detail || 'Incorrect or expired code', true);
+            }
+        } catch (err) {
+            showMsg('Network error verifying code', true);
+        }
+    });
+}
+
+// Cancel verification
+const btnCancelVerify = document.getElementById('btn-cancel-verify');
+if (btnCancelVerify) {
+    btnCancelVerify.addEventListener('click', () => {
+        cancelVerifyState();
+    });
+}
+
+// Initial fetch
+fetchPreferences();
+

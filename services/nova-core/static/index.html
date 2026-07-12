@@ -42,6 +42,35 @@
                     <div class="placeholder-loader">Syncing calendar...</div>
                 </div>
             </section>
+
+            <!-- Bottom Preferences & Identity linking -->
+            <section class="dashboard-card glass-panel settings-panel" id="preferences-panel">
+                <div class="card-header">
+                    <h2>WhatsApp Identity & Settings</h2>
+                </div>
+                <div class="settings-content">
+                    <div class="settings-user-selector">
+                        <button class="settings-tab active" data-user="Ruben">Ruben</button>
+                        <button class="settings-tab" data-user="Meral">Méral</button>
+                    </div>
+                    <div class="settings-form-group">
+                        <div class="status-container">
+                            <span class="status-label">Linked Number:</span>
+                            <span class="status-value" id="linked-number-val">Loading...</span>
+                        </div>
+                        <div class="input-row" id="request-code-row">
+                            <input type="text" id="phone-input" placeholder="e.g. 31612345678" />
+                            <button class="btn btn-primary" id="btn-request-code">Send Code</button>
+                        </div>
+                        <div class="input-row hidden" id="verify-code-row">
+                            <input type="text" id="code-input" placeholder="6-digit code" />
+                            <button class="btn btn-success" id="btn-verify-code">Verify & Link</button>
+                            <button class="btn btn-secondary" id="btn-cancel-verify">Cancel</button>
+                        </div>
+                        <div class="settings-message" id="settings-msg"></div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
     <script src="app.js"></script>

@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from . import llm, db
 from .agent import run_agent
 from .config import settings
-from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice
+from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest
 from .security import verify_whatsapp_signature
 from .whatsapp import process_incoming_whatsapp
 from .tools.calendar import _get_calendar
@@ -207,6 +207,138 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks) 
         
     background_tasks.add_task(process_incoming_whatsapp, payload)
     return {"status": "accepted"}
+
+
+@app.get("/api/preferences")
+async def get_preferences():
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT u.name, up.whatsapp_number, up.dnd_enabled, up.dnd_start, up.dnd_end
+            FROM users u
+            LEFT JOIN user_preferences up ON u.id = up.user_id
+            WHERE u.name IN ('Ruben', 'Meral')
+            """
+        )
+    prefs = {}
+    for r in rows:
+        prefs[r["name"]] = {
+            "whatsapp_number": r["whatsapp_number"] or "",
+            "dnd_enabled": r["dnd_enabled"] if r["dnd_enabled"] is not None else False,
+            "dnd_start": r["dnd_start"].strftime("%H:%M") if r["dnd_start"] else "22:00",
+            "dnd_end": r["dnd_end"].strftime("%H:%M") if r["dnd_end"] else "07:00",
+        }
+    return prefs
+
+
+@app.post("/api/preferences/request-code")
+async def request_code(req: RequestCodeRequest):
+    import random
+    from datetime import datetime, timezone, timedelta
+    from .whatsapp import send_whatsapp_message
+    
+    clean_number = req.number.strip().lstrip("+")
+    if not clean_number.isdigit() or len(clean_number) < 8:
+        raise HTTPException(status_code=400, detail="Invalid phone number format")
+
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        existing_owner = await conn.fetchval(
+            """
+            SELECT u.name 
+            FROM user_preferences up
+            JOIN users u ON up.user_id = u.id
+            WHERE up.whatsapp_number = $1 AND u.name != $2
+            """,
+            clean_number,
+            req.user
+        )
+        if existing_owner:
+            raise HTTPException(
+                status_code=400,
+                detail=f"This number is already linked to {existing_owner}"
+            )
+            
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", req.user)
+        if not user_id:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        code = f"{random.randint(100000, 999999)}"
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        
+        await conn.execute(
+            """
+            INSERT INTO whatsapp_verification_codes (user_id, whatsapp_number, code, expires_at)
+            VALUES ($1, $2, $3, $4)
+            """,
+            user_id,
+            clean_number,
+            code,
+            expires_at
+        )
+
+    otp_message = f"Your Nova verification code is {code}. It expires in 10 minutes."
+    try:
+        await send_whatsapp_message(clean_number, otp_message)
+    except Exception as e:
+        print(f"[ERROR] Failed to send OTP to {clean_number}: {e}")
+
+    print(f"[OTP STATUS] Verification code for {req.user} ({clean_number}): {code}")
+    return {"status": "code_sent"}
+
+
+@app.post("/api/preferences/verify-code")
+async def verify_code(req: VerifyCodeRequest):
+    from datetime import datetime, timezone
+    
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", req.user)
+        if not user_id:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        row = await conn.fetchrow(
+            """
+            SELECT id, whatsapp_number, code, attempts, expires_at
+            FROM whatsapp_verification_codes
+            WHERE user_id = $1 AND attempts < 3 AND expires_at > now()
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            user_id
+        )
+        if not row:
+            raise HTTPException(status_code=400, detail="No active or valid verification code found")
+            
+        attempts = row["attempts"]
+        if attempts >= 3:
+            raise HTTPException(status_code=400, detail="Verification code has been blocked due to too many attempts")
+            
+        await conn.execute(
+            "UPDATE whatsapp_verification_codes SET attempts = attempts + 1 WHERE id = $1",
+            row["id"]
+        )
+        
+        if row["code"] != req.code.strip():
+            raise HTTPException(status_code=400, detail="Incorrect verification code")
+            
+        await conn.execute(
+            """
+            INSERT INTO user_preferences (user_id, whatsapp_number)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id) DO UPDATE SET whatsapp_number = EXCLUDED.whatsapp_number
+            """,
+            user_id,
+            row["whatsapp_number"]
+        )
+        
+        await conn.execute(
+            "UPDATE whatsapp_verification_codes SET attempts = 99 WHERE id = $1",
+            row["id"]
+        )
+        
+    return {"status": "success", "linked_number": row["whatsapp_number"]}
 
 
 import os
