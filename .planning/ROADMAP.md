@@ -243,7 +243,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Read-Only Dashboard | 1/1 | Complete    | 2026-07-11 |
 | 7. Preferences Schema & Identity Migration | 1/1 | Complete | 2026-07-12 |
 | 8. WhatsApp Self-Service OTP Linking | 1/1 | Complete | 2026-07-12 |
-| 9. Per-User Dynamic Scheduling | 0/TBD | Not started | - |
+| 9. Per-User Dynamic Scheduling | 1/1 | Complete | 2026-07-12 |
 | 10. Per-User Do Not Disturb | 0/TBD | Not started | - |
 | 11. Reliability Hardening | 1/1 | Complete | 2026-07-12 |
 | 12. Security Hardening | 1/1 | Complete | 2026-07-12 |
