@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # Telegram
     telegram_bot_token: str = ""
     telegram_webhook_secret: str = ""
-    telegram_enabled: bool = False
+    nova_telegram_enabled: bool = False
     nova_telegram_users: str = ""
 
     # Scheduled Maintenance Agent (Phase 29)

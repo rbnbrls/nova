@@ -35,15 +35,17 @@ class TestTelegramWebhook:
     """Tests for POST /webhooks/telegram endpoint."""
 
     def test_missing_secret_token_returns_401(self):
-        resp = client.post(
-            "/webhooks/telegram",
-            json=_make_telegram_update(),
-            headers={}
-        )
+        with patch("app.config.settings.nova_telegram_enabled", True):
+            resp = client.post(
+                "/webhooks/telegram",
+                json=_make_telegram_update(),
+                headers={}
+            )
         assert resp.status_code == 401
 
     def test_invalid_secret_token_returns_401(self):
-        with patch("app.config.settings.telegram_webhook_secret", "expected-secret"):
+        with patch("app.config.settings.nova_telegram_enabled", True), \
+             patch("app.config.settings.telegram_webhook_secret", "expected-secret"):
             resp = client.post(
                 "/webhooks/telegram",
                 json=_make_telegram_update(),
@@ -52,12 +54,13 @@ class TestTelegramWebhook:
         assert resp.status_code == 401
 
     def test_valid_secret_token_returns_accepted(self):
-        with patch("app.config.settings.telegram_enabled", True), \
+        mock_conn = AsyncMock()
+        mock_conn.fetchval.return_value = None
+        mock_pool = MagicMock()
+        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        with patch("app.config.settings.nova_telegram_enabled", True), \
              patch("app.config.settings.telegram_webhook_secret", "valid-secret"), \
-             patch("app.main.db_get_pool") as mock_pool:
-            mock_conn = AsyncMock()
-            mock_conn.fetchval.return_value = None
-            mock_pool.return_value.acquire.return_value.__aenter__.return_value = mock_conn
+             patch("app.main.db_get_pool", return_value=mock_pool):
             resp = client.post(
                 "/webhooks/telegram",
                 json=_make_telegram_update(),
@@ -67,7 +70,7 @@ class TestTelegramWebhook:
         assert resp.json() == {"status": "accepted"}
 
     def test_disabled_channel_returns_404(self):
-        with patch("app.config.settings.telegram_enabled", False):
+        with patch("app.config.settings.nova_telegram_enabled", False):
             resp = client.post(
                 "/webhooks/telegram",
                 json=_make_telegram_update(),
@@ -76,7 +79,7 @@ class TestTelegramWebhook:
         assert resp.status_code == 404
 
     def test_invalid_json_body_returns_400(self):
-        with patch("app.config.settings.telegram_enabled", True), \
+        with patch("app.config.settings.nova_telegram_enabled", True), \
              patch("app.config.settings.telegram_webhook_secret", "secret"):
             resp = client.post(
                 "/webhooks/telegram",
@@ -252,7 +255,7 @@ class TestTelegramWebhookDedup:
         mock_pool = MagicMock()
         mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
 
-        with patch("app.config.settings.telegram_enabled", True), \
+        with patch("app.config.settings.nova_telegram_enabled", True), \
              patch("app.config.settings.telegram_webhook_secret", "secret"), \
              patch("app.main.db_get_pool", return_value=mock_pool):
             from fastapi.testclient import TestClient

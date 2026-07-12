@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI):
     scheduler.start()
 
     # Register Telegram bot command menu if enabled
-    if settings.telegram_enabled and settings.telegram_bot_token:
+    if settings.nova_telegram_enabled and settings.telegram_bot_token:
         try:
             import httpx
             async with httpx.AsyncClient() as client:
@@ -486,7 +486,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks) 
 
 @app.post("/webhooks/telegram")
 async def telegram_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
-    if not settings.telegram_enabled:
+    if not settings.nova_telegram_enabled:
         raise HTTPException(status_code=404, detail="Telegram channel is not enabled")
 
     body = await request.body()
