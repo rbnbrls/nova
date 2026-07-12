@@ -612,7 +612,7 @@ Plans:
 
 **Depends on**: Phase 1 (test harness for fix branches), Phase 9 (ops-bridge / heal.sh patterns)
 
-**Requirements**: TBD
+**Requirements**: MAINT-01, MAINT-02, MAINT-03, MAINT-04, MAINT-FRAMEWORK
 
 **Success Criteria:**
 
@@ -622,7 +622,13 @@ Plans:
 4. Disk and VRAM trend report filed as a periodic issue
 5. All findings are Forgejo issues; merge requires human approval
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+
+- [ ] 29-01-PLAN.md — ForgejoClient, maintenance subpackage stubs, config, Docker setup, scheduler wiring
+- [ ] 29-02-PLAN.md — Nightly dependency/CVE scanner, log-anomaly reviewer
+- [ ] 29-03-PLAN.md — Backup verification, disk/VRAM trend reporter
 
 ---
 
