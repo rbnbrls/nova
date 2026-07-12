@@ -40,3 +40,35 @@ async def test_user_from_whatsapp():
         # Test unrecognized
         res = await user_from_whatsapp("99999")
         assert res == HOUSEHOLD
+
+
+# ---------------------------------------------------------------------------
+# Phase 9: Identity resolution edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_parse_whatsapp_map_empty_entries():
+    with patch.object(settings, "nova_whatsapp_users", "12345:Ruben, , 67890:Meral,,"):
+        mapping = _parse_whatsapp_map()
+        assert len(mapping) == 2
+        assert mapping["12345"] == User(name="Ruben")
+        assert mapping["67890"] == User(name="Meral")
+
+
+def test_parse_whatsapp_map_whitespace():
+    with patch.object(settings, "nova_whatsapp_users", "  12345  :  Ruben , 67890:Meral "):
+        mapping = _parse_whatsapp_map()
+        assert mapping["12345"] == User(name="Ruben")
+        assert mapping["67890"] == User(name="Meral")
+
+
+def test_parse_whatsapp_map_non_ascii_name():
+    with patch.object(settings, "nova_whatsapp_users", "12345:Méral"):
+        mapping = _parse_whatsapp_map()
+        assert mapping["12345"] == User(name="Méral")
+
+
+def test_parse_whatsapp_map_leading_plus():
+    with patch.object(settings, "nova_whatsapp_users", "+12345:Ruben"):
+        mapping = _parse_whatsapp_map()
+        assert "+12345" in mapping

@@ -130,3 +130,78 @@ async def test_webhook_authorized_number_success():
         mock_agent.assert_called_once_with("What's on the calendar?", user="Ruben")
         mock_send.assert_called_once_with("31612345678", "Here is your calendar...")
 
+
+# ---------------------------------------------------------------------------
+# Phase 9: Webhook endpoint edge case tests
+# ---------------------------------------------------------------------------
+
+def _sig_header(secret: str, body: bytes) -> str:
+    h = hmac.new(secret.encode(), body, hashlib.sha256)
+    return f"sha256={h.hexdigest()}"
+
+
+def test_whatsapp_webhook_signature_raw_body_used():
+    settings.whatsapp_app_secret = "test_secret"
+    body1 = b'{"key":"value"}'
+    sig1 = _sig_header("test_secret", body1)
+    resp1 = client.post(
+        "/webhooks/whatsapp",
+        content=body1,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": sig1,
+        },
+    )
+    assert resp1.status_code == 200 or resp1.status_code == 400
+
+    body2 = b'{"key": "value"}'
+    resp2 = client.post(
+        "/webhooks/whatsapp",
+        content=body2,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": sig1,
+        },
+    )
+    assert resp2.status_code == 401
+
+
+def test_whatsapp_webhook_missing_header():
+    settings.whatsapp_app_secret = "test_secret"
+    resp = client.post(
+        "/webhooks/whatsapp",
+        content=b'{"test": true}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 401
+
+
+def test_whatsapp_webhook_invalid_json_body():
+    settings.whatsapp_app_secret = "test_secret"
+    body = b'{"broken": }'
+    sig = _sig_header("test_secret", body)
+    resp = client.post(
+        "/webhooks/whatsapp",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": sig,
+        },
+    )
+    assert resp.status_code == 400
+
+
+def test_whatsapp_webhook_non_message_payload():
+    settings.whatsapp_app_secret = "test_secret"
+    body = b'{"entry": [{"changes": [{"value": {"statuses": [{"id": "abc"}]}}]}]}'
+    sig = _sig_header("test_secret", body)
+    resp = client.post(
+        "/webhooks/whatsapp",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": sig,
+        },
+    )
+    assert resp.status_code == 200
+
