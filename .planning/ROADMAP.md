@@ -905,8 +905,8 @@ Plans:
 | 12. Read-Only Dashboard | 1/1 | Complete    | 2026-07-12 |
 | 13. DB Preferences & Identity Migration | 1/1 | Complete    | 2026-07-12 |
 | 14. WhatsApp OTP Self-Service Linking | 1/1 | Complete    | 2026-07-12 |
-| 15. Per-User Dynamic Scheduling | 0/1 | Planning ready | — |
-| 16. Per-User Do Not Disturb | 0/1 | Planning ready | — |
+| 15. Per-User Dynamic Scheduling | 1/1 | Complete    | 2026-07-12 |
+| 16. Per-User Do Not Disturb | 1/1 | Complete    | 2026-07-12 |
 | 17. Reliability Hardening | 1/1 | Complete    | 2026-07-12 |
 | 18. Security Hardening | 1/1 | Complete    | 2026-07-12 |
 | 19. Channel Adapter & Multi-Channel Schema | 1/1 | Complete    | 2026-07-12 |

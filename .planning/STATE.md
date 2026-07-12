@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Ready to plan
-last_updated: "2026-07-12T16:09:00.000Z"
+last_updated: "2026-07-12T16:07:38.395Z"
 progress:
   total_phases: 37
-  completed_phases: 31
+  completed_phases: 33
   total_plans: 43
   completed_plans: 39
-  percent: 86
+  percent: 89
 stopped_at: null
-current_phase: 36
-current_phase_name: Phase 36 — Write-Action Audit Trail
+current_phase: 17
+current_phase_name: Phase 17 — Reliability Hardening
 current_plan: 01
 ---
 
@@ -225,6 +225,13 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Completed:** 2026-07-12T16:09:00Z
 **Plans executed:** 1 (15-01)
 **Commits:** 1d8198d
+
+### Session 2026-07-12 (Phase 16 — Per-User Do Not Disturb)
+
+**Started:** 2026-07-12T16:04:20Z
+**Completed:** 2026-07-12T16:06:14Z
+**Plans executed:** 1 (16-01)
+**Commits:** b005650
 
 ## Operator Next Steps
 
