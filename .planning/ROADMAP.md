@@ -41,3 +41,15 @@ Plans:
 
 - [x] 38-02-PLAN.md — Core refactor: IMAP fetch, SMTP send, send_email tool, scheduler adaptation
 - [x] 38-03-PLAN.md — Alembic migration to drop processed_emails, rewrite email and scheduler tests
+
+### Phase 39: add a input field for users to chat with nova on the /static/index.html page. Put the chat box in a column below the agenda.
+
+**Goal:** Users can chat with Nova directly from the dashboard — send a message and see Nova's reply without switching to WhatsApp or Telegram.
+**Requirements**: TBD
+**Depends on:** Phase 38
+**Plans:** 1 plan
+
+Plans:
+
+**Wave 1**
+- [ ] 39-01-PLAN.md — Backend endpoint (POST /dashboard/chat + Pydantic models + tests) + Frontend (HTML section + CSS styles + JS handlers)

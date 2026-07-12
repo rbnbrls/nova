@@ -87,4 +87,13 @@ class LinkTelegramVerifyRequest(BaseModel):
     code: str
 
 
+class DashboardChatRequest(BaseModel):
+    user: str = "household"
+    message: str
+
+
+class DashboardChatResponse(BaseModel):
+    reply: str
+
+
 

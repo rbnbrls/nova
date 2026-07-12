@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from . import llm, db
 from .agent import run_agent
 from .config import settings
-from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest, LinkWhatsAppStartRequest, LinkWhatsAppVerifyRequest, LinkTelegramStartRequest, LinkTelegramVerifyRequest
+from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest, LinkWhatsAppStartRequest, LinkWhatsAppVerifyRequest, LinkTelegramStartRequest, LinkTelegramVerifyRequest, DashboardChatRequest
 from .security import verify_whatsapp_signature, verify_telegram_signature
 from .channels.whatsapp import process_incoming_whatsapp, send_whatsapp_otp
 from .channels.telegram import process_incoming_telegram, _handle_telegram_command, send_telegram_otp
@@ -306,6 +306,35 @@ async def dashboard_stream():
             
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+
+@app.post("/dashboard/chat")
+async def dashboard_chat(req: DashboardChatRequest) -> dict:
+    """Send a message to Nova from the dashboard and return the reply.
+
+    Accepts { user, message }, runs the full agent loop, and returns
+    { reply }. Empty messages return 400. Agent loop failures return 502.
+    """
+    if not req.message or not req.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+
+    import logging
+    log = logging.getLogger("nova-core")
+
+    try:
+        reply = await run_agent(
+            req.message.strip(),
+            user=req.user,
+            history=None,
+            channel="dashboard",
+        )
+    except Exception as e:
+        log.error(f"Dashboard chat agent loop failed for {req.user}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Nova is having trouble right now. Please try again later.",
+        )
+
+    return {"reply": reply}
 
 
 @app.post("/dashboard/link-whatsapp/start")

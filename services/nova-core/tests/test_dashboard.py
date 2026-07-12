@@ -94,3 +94,36 @@ def test_dashboard_stream_sse(client):
             assert "tasks" in parsed
             assert "events" in parsed
             assert parsed["tasks"][0]["title"] == "Clean room"
+
+
+def test_dashboard_chat_returns_reply(client):
+    """POST /dashboard/chat with valid message returns {reply} with 200."""
+    with patch("app.main.run_agent", new_callable=AsyncMock) as mock_run:
+        mock_run.return_value = "I can help with that!"
+        resp = client.post("/dashboard/chat", json={"user": "Ruben", "message": "What's on my agenda?"})
+        assert resp.status_code == 200
+        assert resp.json()["reply"] == "I can help with that!"
+        mock_run.assert_awaited_once_with("What's on my agenda?", user="Ruben", history=None, channel="dashboard")
+
+
+def test_dashboard_chat_empty_message(client):
+    """POST /dashboard/chat with empty message returns 400."""
+    resp = client.post("/dashboard/chat", json={"user": "Ruben", "message": ""})
+    assert resp.status_code == 400
+    assert "empty" in resp.json()["detail"].lower()
+
+
+def test_dashboard_chat_agent_error(client):
+    """POST /dashboard/chat when run_agent raises returns 502."""
+    with patch("app.main.run_agent", new_callable=AsyncMock) as mock_run:
+        mock_run.side_effect = RuntimeError("LLM crashed")
+        resp = client.post("/dashboard/chat", json={"user": "Ruben", "message": "Hello"})
+        assert resp.status_code == 502
+        assert "trouble" in resp.json()["detail"].lower()
+
+
+def test_dashboard_html_has_chat_panel(client):
+    """The static index.html page includes the chat-panel section."""
+    resp = client.get("/static/index.html")
+    assert resp.status_code == 200
+    assert b'class="dashboard-card glass-panel chat-panel"' in resp.content or b'id="chat-panel"' in resp.content
