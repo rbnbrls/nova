@@ -206,7 +206,10 @@ Plans:
 3. Messages from unrecognized WhatsApp senders fall back gracefully to household identity
 4. WhatsApp signature verification uses HMAC-SHA256 + `hmac.compare_digest` for constant-time comparison
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 09-01-PLAN.md — Webhook endpoint tests, identity resolution edge cases, outbound message coverage
 
 ---
 
