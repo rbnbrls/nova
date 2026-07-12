@@ -10,7 +10,7 @@ from . import maintenance
 from .channels.whatsapp import send_whatsapp_message
 from .channels.dispatcher import send_to_user
 from .tools.calendar import _get_calendar
-from .tools.email import fetch_emails_from_graph, classify_importance
+from .tools.email import fetch_emails_imap, classify_importance, _mark_email_processed
 
 
 async def send_morning_briefing_for_user(user_name: str):
@@ -22,7 +22,7 @@ async def send_morning_briefing_for_user(user_name: str):
     
     pool = await get_pool()
     
-    emails = await fetch_emails_from_graph(limit=10)
+    emails = await fetch_emails_imap(limit=10)
     important_mails = []
     for mail in emails:
         if await classify_importance(mail["subject"], mail["from"], mail["preview"]):
@@ -93,7 +93,7 @@ async def send_weekly_briefing_for_user(user_name: str):
     
     pool = await get_pool()
     
-    emails = await fetch_emails_from_graph(limit=10)
+    emails = await fetch_emails_imap(limit=10)
     important_mails = []
     for mail in emails:
         if await classify_importance(mail["subject"], mail["from"], mail["preview"]):
@@ -254,39 +254,28 @@ async def check_overdue_tasks():
 
 
 async def check_new_emails():
-    """Triage recent emails and push notifications for new important ones."""
-    emails = await fetch_emails_from_graph(limit=10)
+    """Triage recent emails and push notifications for new important ones.
+
+    Deduplication uses IMAP flags ($NovaProcessed) instead of the
+    processed_emails database table — no DB dependency for email tracking.
+    """
+    emails = await fetch_emails_imap(limit=10)
     if not emails:
         return
-        
-    pool = await get_pool()
+
     for mail in emails:
         # Check if email is important
         is_important = await classify_importance(mail["subject"], mail["from"], mail["preview"])
         if not is_important:
             continue
-            
-        # Check database if already processed
-        async with pool.acquire() as conn:
-            exists = await conn.fetchval(
-                "SELECT 1 FROM processed_emails WHERE email_id = $1",
-                mail["id"]
-            )
-            if exists:
-                continue
-                
-            # Log as processed
-            await conn.execute(
-                "INSERT INTO processed_emails (email_id) VALUES ($1) ON CONFLICT DO NOTHING",
-                mail["id"]
-            )
-            
+
         alert = (
             f"New Important Email\n"
             f"From: {mail['from']}\n"
             f"Subject: {mail['subject']}\n"
             f"Preview: {mail['preview']}"
         )
+
         pool = await get_pool()
         async with pool.acquire() as conn:
             user_rows = await conn.fetch(
@@ -294,6 +283,9 @@ async def check_new_emails():
             )
             for row in user_rows:
                 await send_to_user(row["name"], alert, proactive=True)
+
+        # Mark as processed via IMAP flags (not DB)
+        await _mark_email_processed(mail["id"])
 
 
 async def process_queued_notifications():
