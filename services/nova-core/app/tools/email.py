@@ -1,6 +1,9 @@
 """Email tool using MS Graph API with hybrid rule+LLM importance classification."""
 from __future__ import annotations
 
+import json
+import re
+
 import httpx
 
 from .base import tool
@@ -98,6 +101,92 @@ async def fetch_emails_from_graph(limit: int = 10, unread_only: bool = False) ->
                 "unread": not item.get("isRead", True)
             })
         return emails
+
+
+async def extract_actions_from_email(email: dict) -> list[dict]:
+    """Extract actionable items from an email using local LLM.
+
+    Returns a list of action dicts, each with:
+      - type: "task" | "event"
+      - summary: str
+      - due_at: str (ISO date, for tasks) | start/end: str (ISO datetime, for events)
+      - confidence: float (0-1)
+
+    Returns empty list if no actions detected or on error.
+    """
+    prompt = (
+        "You are a household email assistant. Extract any actionable items from this email. "
+        "Return a JSON array of objects with fields: type ('task' or 'event'), summary, "
+        "due_at (for tasks), start/end (for events, ISO format), and confidence (0-1).\n\n"
+        f"Subject: {email.get('subject', '')}\n"
+        f"From: {email.get('from', '')}\n"
+        f"Body: {email.get('preview', email.get('body', ''))}\n\n"
+        "If no actionable items exist, return an empty array []."
+    )
+    try:
+        result = await llm.chat([{"role": "user", "content": prompt}])
+        content = result.message.get("content", "").strip()
+        # Extract JSON array from LLM response
+        match = re.search(r'\[.*?\]', content, re.DOTALL)
+        if match:
+            actions = json.loads(match.group())
+            if isinstance(actions, list):
+                return actions
+        return []
+    except Exception as e:
+        print(f"[ERROR] extract_actions_from_email failed: {e}")
+        return []
+
+
+async def draft_reply(email: dict) -> str:
+    """Generate a reply draft for an email using local LLM.
+
+    Returns the draft text as a string, or empty string on error.
+    """
+    prompt = (
+        "Draft a polite reply to this email. Keep it concise and natural.\n\n"
+        f"From: {email.get('from', '')}\n"
+        f"Subject: {email.get('subject', '')}\n"
+        f"Body: {email.get('preview', email.get('body', ''))}\n\n"
+        "Reply draft:"
+    )
+    try:
+        result = await llm.chat([{"role": "user", "content": prompt}])
+        draft = result.message.get("content", "").strip()
+        return draft
+    except Exception as e:
+        print(f"[ERROR] draft_reply failed: {e}")
+        return ""
+
+
+@tool(
+    name="extract_actions_from_email",
+    description="Analyze an email and extract actionable items: tasks or calendar events. Returns proposed tasks/events that the user can confirm.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "email_id": {"type": "string", "description": "The email ID from list_recent_emails to analyze."},
+        },
+        "required": ["email_id"],
+    },
+)
+async def extract_actions_tool(email_id: str) -> str:
+    """Tool wrapper — fetches email content and extracts actions."""
+    emails = await fetch_emails_from_graph(limit=10)
+    email = next((e for e in emails if e["id"] == email_id), None)
+    if not email:
+        return f"Email with ID '{email_id}' not found."
+    actions = await extract_actions_from_email(email)
+    if not actions:
+        return "No actionable items found in this email."
+    lines = []
+    for a in actions:
+        if a["type"] == "task":
+            lines.append(f"📋 Task: {a['summary']} (due: {a.get('due_at', 'unknown')})")
+        elif a["type"] == "event":
+            lines.append(f"📅 Event: {a['summary']} ({a.get('start', '?')} → {a.get('end', '?')})")
+        lines.append(f"   Confidence: {a.get('confidence', 0):.0%}")
+    return "Extracted actions:\n" + "\n".join(lines)
 
 
 @tool(

@@ -17,7 +17,7 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import zoneinfo
 
 from fastapi import FastAPI, Request, Query, BackgroundTasks, Response, HTTPException
@@ -210,7 +210,8 @@ async def dashboard_tasks() -> dict:
         tasks.append({
             "title": r["title"],
             "due_at": due_iso,
-            "assignee": r["assignee"] or "unassigned"
+            "assignee": r["assignee"] or "unassigned",
+            "overdue": r["due_at"] is not None and r["due_at"] < datetime.now(timezone.utc) - timedelta(hours=48)
         })
     return {"tasks": tasks}
 
@@ -755,11 +756,16 @@ async def request_code(req: RequestCodeRequest):
 
     otp_message = f"Your Nova verification code is {code}. It expires in 10 minutes."
     if req.channel == "telegram":
-        from .channels.dispatcher import send_to_user
         try:
-            await send_to_user(req.user, otp_message, proactive=False)
+            sent = await send_telegram_otp(req.user, code)
+            if not sent:
+                raise RuntimeError("No chat_id found")
         except Exception as e:
             print(f"[ERROR] Failed to send Telegram OTP to {req.user}: {e}")
+            raise HTTPException(
+                status_code=502,
+                detail="Failed to send verification code via Telegram. Please try again."
+            )
     else:
         try:
             await send_whatsapp_message(clean_number, otp_message)
