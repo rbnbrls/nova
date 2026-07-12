@@ -588,7 +588,7 @@ Plans:
 
 Plans:
 
-- [ ] 25-01-PLAN.md — Fix request-code Telegram OTP to use send_telegram_otp directly
+- [x] 25-01-PLAN.md — Fix request-code Telegram OTP to use send_telegram_otp directly
 
 ---
 
@@ -915,7 +915,7 @@ Plans:
 | 22. Push Gateway Refactor | 0/1 | Planning ready | — |
 | 23. Telegram OTP Self-Service Linking | 1/1 | Complete    | 2026-07-12 |
 | 24. Telegram DND Queuing | 1/1 | Complete   | 2026-07-12 |
-| 25. Direct Telegram OTP Routing | 0/1 | Planning ready | — |
+| 25. Direct Telegram OTP Routing | 1/1 | Complete | 2026-07-12 |
 | 26. Agent-Run Tracing & Quality Alerts | 1/1 | Complete    | 2026-07-12 |
 | 27. User-Feedback → Incident Loop | 2/2 | Complete    | 2026-07-12 |
 | 28. Staging Lane & Model Upgrades | 2/2 | Complete    | 2026-07-12 |

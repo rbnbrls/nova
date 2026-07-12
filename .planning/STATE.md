@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Ready to plan
-last_updated: "2026-07-12T16:12:00.000Z"
+last_updated: "2026-07-12T16:14:00.000Z"
 progress:
   total_phases: 37
   completed_phases: 34
   total_plans: 43
-  completed_plans: 40
-  percent: 91
+  completed_plans: 43
+  percent: 98
 stopped_at: null
-current_phase: 23
-current_phase_name: Phase 23 — Telegram OTP Self-Service Linking
+current_phase: 34
+current_phase_name: Phase 34 — Deeper Email & Calendar Intelligence
 current_plan: 01
 ---
 
@@ -103,11 +103,13 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 
 ## Current Session
 
-**Phase 19: Channel Adapter Pattern & Multi-Channel Schema** — Plan 19-01 completed (2026-07-12)
+**Phase 33: Proactivity That Respects Attention** — Plan 33-01 completed (2026-07-12)
 
 ### Executed Plans
 
-| Plan | Not started |
+| Plan | Summary |
+|------|---------|
+| 33-01 | is_user_busy() calendar gate, 3-stage deadline escalation, dashboard overdue flag |
 |------|---------|
 | 28-01 | docker-compose.staging.yml, shared nova-net network, staging entrypoint, .env.staging.example |
 | 28-02 | ops/promote.sh promotion gate, staging-first deploy.sh, config.env.example with benchmark workflow |
@@ -241,7 +243,19 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Plans executed:** 1 (24-01)
 **Commits:** 2919299
 
+### Session 2026-07-12 (Phase 33 — Proactivity That Respects Attention)
+
+**Started:** 2026-07-12T18:04:37Z
+**Completed:** 2026-07-12T18:10:00Z
+**Plans executed:** 1 (33-01)
+**Commits:** 3eb04cf, 4ea50ab
+
 ## Decisions Made
+
+- is_user_busy() is async def even though underlying CalDAV client is sync — future-proof for async migration
+- Calendar unavailable → pass (fail-open) rather than block messages
+- Meetings are not queued — scheduler retries in 60 seconds due to transient nature
+- 48h threshold chosen for dashboard overdue flag to match escalation stage boundary
 
 - Push gateway audit confirmed all 5 scheduler call sites correctly route through dispatcher.send_to_user() or channel-appropriate routing
 - process_queued_notifications intentionally bypasses dispatcher — queued notifications must replay to the exact channel they were enqueued for
@@ -249,5 +263,5 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 
 ## Operator Next Steps
 
-- Next: Phase 33 — Proactivity That Respects Attention
+- Next: Phase 34 — Deeper Email & Calendar Intelligence
 - Old milestone artifacts in `.planning/milestones/` serve as implementation reference
