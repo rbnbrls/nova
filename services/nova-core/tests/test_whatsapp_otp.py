@@ -51,11 +51,13 @@ def test_start_success(client):
         assert resp.status_code == 200
         assert resp.json()["status"] == "code_sent"
 
-        # Verify OTP was sent with cleaned number
+        # Verify OTP was sent with cleaned number and a 6-digit code
         mock_send_otp.assert_called_once()
-        args = mock_send_otp.call_args
-        assert args[1]["code"] is not None
-        assert len(args[1]["code"]) == 6
+        call_args = mock_send_otp.call_args.args
+        assert len(call_args) >= 2
+        assert call_args[0] == "31612345678"  # cleaned number
+        assert call_args[1] is not None
+        assert len(call_args[1]) == 6  # 6-digit code
 
         # Verify code inserted into DB
         mock_conn.execute.assert_called_once()
