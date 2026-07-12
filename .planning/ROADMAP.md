@@ -763,7 +763,11 @@ Plans:
 2. Every mutating tool call recorded and visible in the feed
 3. Non-destructive reads and queries do not appear in the audit trail
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [x] 36-01-PLAN.md — Write-action audit trail (migration, agent recording, dashboard endpoint, SSE feed, UI panel)
+
 **UI hint**: yes
 
 ---
@@ -834,5 +838,5 @@ Plans:
 | 33. Proactivity That Respects Attention | 0/0 | Not started | — |
 | 34. Deeper Email & Calendar Intelligence | 0/0 | Not started | — |
 | 35. Home Assistant as a Tool | 0/0 | Not started | — |
-| 36. Write-Action Audit Trail | 0/0 | Not started | — |
+| 36. Write-Action Audit Trail | 1/1 | Complete    | 2026-07-12 |
 | 37. Paper & Photo Intake | 0/2 | In progress | — |

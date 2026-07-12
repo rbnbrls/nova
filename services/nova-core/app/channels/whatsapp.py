@@ -39,6 +39,7 @@ class WhatsAppAdapter(ChannelAdapter):
         """Parse a validated webhook payload into an InboundMessage.
 
         Returns None for non-message events (status updates, echoes).
+        Handles both text and image message types.
         """
         try:
             entry = raw_payload.get("entry", [])[0]
@@ -50,15 +51,22 @@ class WhatsAppAdapter(ChannelAdapter):
             msg = messages[0]
             sender = msg.get("from", "")
             text = msg.get("text", {}).get("body", "")
-            if not sender or not text:
+            # Detect image messages (WhatsApp sends no text body for images)
+            media_type = "image" if msg.get("image") else None
+            media_id = msg.get("image", {}).get("id") if media_type else None
+            if not sender:
                 return None
+            if not text and not media_id:
+                return None  # Not a text or image message — status update, echo, etc.
         except (IndexError, KeyError, TypeError):
             return None
 
         return InboundMessage(
             channel="whatsapp",
             sender_id=sender.lstrip("+"),
-            text=text,
+            text=text or "",
+            media_type=media_type,
+            media_id=media_id,
             raw_payload=raw_payload,
         )
 
@@ -202,22 +210,64 @@ async def send_whatsapp_message(to_number: str, text: str, proactive: bool = Fal
     await _send_to_number(to_number, text, proactive, user_name=None)
 
 
-async def process_incoming_whatsapp(payload: dict):
-    """Background task processing validated incoming webhook messages (backward-compat)."""
+async def download_whatsapp_media(media_id: str) -> bytes | None:
+    """Download image bytes from Meta's media servers via the Graph API.
+
+    Args:
+        media_id: Media ID from the WhatsApp image payload (msg.image.id).
+
+    Returns:
+        Raw image bytes on success, None on any failure (with logging).
+    """
+    if not settings.whatsapp_access_token:
+        print(f"[MOCK DOWNLOAD] Media {media_id} — token not configured, returning None")
+        return None
+
+    headers = {"Authorization": f"Bearer {settings.whatsapp_access_token}"}
+    media_url = f"https://graph.facebook.com/v18.0/{media_id}"
+
     try:
-        entry = payload.get("entry", [])[0]
-        change = entry.get("changes", [])[0]
-        value = change.get("value", {})
-        messages = value.get("messages", [])
-        if not messages:
-            return
-        msg = messages[0]
-        sender = msg.get("from")
-        text = msg.get("text", {}).get("body")
-        if not sender or not text:
-            return
-    except Exception:
+        async with httpx.AsyncClient() as client:
+            # Step 1: Resolve media ID to a temporary download URL
+            resp = await client.get(media_url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            download_url = data.get("url")
+            if not download_url:
+                print(f"[ERROR] Meta API response for media {media_id} has no 'url' field: {data}")
+                return None
+
+            # Step 2: Download the actual image bytes
+            dl_resp = await client.get(download_url, headers=headers)
+            dl_resp.raise_for_status()
+            return dl_resp.content
+    except httpx.HTTPStatusError as e:
+        print(f"[ERROR] Meta API HTTP error downloading media {media_id}: {e}")
+        return None
+    except httpx.RequestError as e:
+        print(f"[ERROR] Network error downloading media {media_id}: {e}")
+        return None
+    except Exception as e:
+        print(f"[ERROR] Unexpected error downloading media {media_id}: {e}")
+        return None
+
+
+async def process_incoming_whatsapp(payload: dict):
+    """Background task processing validated incoming webhook messages (backward-compat).
+
+    Handles both text and image messages. Image messages are downloaded from Meta,
+    analyzed via the local vision model, and the extraction context is piped into
+    the agent as a synthetic user message.
+    """
+    # Use the adapter to parse the payload (handles both text and image)
+    adapter = WhatsAppAdapter()
+    inbound = await adapter.process_incoming(payload)
+    if inbound is None:
         return
+
+    sender = inbound.sender_id
+    text = inbound.text
+    media_id = inbound.media_id
 
     from .. import identity
     clean_sender = sender.lstrip("+")
@@ -236,6 +286,32 @@ async def process_incoming_whatsapp(payload: dict):
             )
     except Exception as e:
         print(f"[ERROR] Failed to update last_inbound_at: {e}")
+
+    # Image message handling: download → analyze → build synthetic context
+    if media_id:
+        image_bytes = await download_whatsapp_media(media_id)
+        if image_bytes:
+            from app.vision import analyze_image
+            extraction = await analyze_image(image_bytes)
+            if extraction.get("error"):
+                await send_whatsapp_message(
+                    sender,
+                    "I had trouble reading that photo. Could you type the important details instead?"
+                )
+                return
+
+            # Build a synthetic message so the LLM can reason about the extraction
+            text = (
+                f"[User sent a photo. Vision analysis: {extraction.get('summary', '')}\n"
+                f" Extracted events: {extraction.get('events', [])}  "
+                f"Extracted tasks: {extraction.get('tasks', [])}]"
+            )
+        else:
+            await send_whatsapp_message(
+                sender,
+                "I could not download the photo you sent. Please try again or send the text directly."
+            )
+            return
 
     reply = await run_agent(text, user=user.name)
     await send_whatsapp_message(sender, reply)

@@ -14,10 +14,12 @@ from typing import Any
 class InboundMessage:
     """Normalised representation of an incoming channel message."""
 
-    channel: str         # 'whatsapp' | 'telegram' | 'voice'
-    sender_id: str       # Channel-specific sender identifier (E.164, chat_id, etc.)
-    text: str            # Message body text
-    raw_payload: Any     # Original payload for channel-specific access
+    channel: str              # 'whatsapp' | 'telegram' | 'voice'
+    sender_id: str            # Channel-specific sender identifier (E.164, chat_id, etc.)
+    text: str                 # Message body text
+    raw_payload: Any          # Original payload for channel-specific access
+    media_type: str | None = None   # 'image' for photo messages, None for text
+    media_id: str | None = None     # Channel-specific media identifier (e.g. WhatsApp image.id)
 
 
 class ChannelAdapter(ABC):

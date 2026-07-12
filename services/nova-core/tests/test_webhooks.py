@@ -295,7 +295,7 @@ async def test_download_whatsapp_media_no_token():
 @pytest.mark.asyncio
 async def test_download_whatsapp_media_success():
     """download_whatsapp_media returns bytes when Meta API succeeds."""
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import AsyncMock, MagicMock, patch
     from app.channels.whatsapp import download_whatsapp_media
     from app.config import settings
 
@@ -304,13 +304,12 @@ async def test_download_whatsapp_media_success():
         mock_client = AsyncMock()
         mock_client_cls.return_value.__aenter__.return_value = mock_client
 
-        # First GET: fetch media URL
-        mock_resp_meta = AsyncMock()
+        # httpx response methods (raise_for_status, json, content) are synchronous
+        mock_resp_meta = MagicMock()
         mock_resp_meta.json.return_value = {"url": "https://cdn.meta.com/photo.jpg"}
         mock_resp_meta.raise_for_status.return_value = None
 
-        # Second GET: download actual bytes
-        mock_resp_dl = AsyncMock()
+        mock_resp_dl = MagicMock()
         mock_resp_dl.content = b"fake-image-bytes"
         mock_resp_dl.raise_for_status.return_value = None
 
@@ -324,7 +323,8 @@ async def test_download_whatsapp_media_success():
 @pytest.mark.asyncio
 async def test_download_whatsapp_media_http_failure():
     """download_whatsapp_media returns None on Meta API HTTP error."""
-    from unittest.mock import AsyncMock, patch
+    import httpx
+    from unittest.mock import AsyncMock, MagicMock, patch
     from app.channels.whatsapp import download_whatsapp_media
     from app.config import settings
 
@@ -335,7 +335,7 @@ async def test_download_whatsapp_media_http_failure():
 
         # Simulate HTTP error on the first GET
         mock_client.get.side_effect = httpx.HTTPStatusError(
-            "403 Forbidden", request=None, response=AsyncMock(status_code=403)
+            "403 Forbidden", request=None, response=MagicMock(status_code=403)
         )
 
         result = await download_whatsapp_media("media-id-789")
@@ -380,8 +380,8 @@ async def test_webhook_image_message_flow():
     with patch("app.channels.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
          patch("app.channels.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
          patch("app.identity.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve, \
-         patch("app.channels.whatsapp.download_whatsapp_media", new_callable=AsyncMock, create=True) as mock_dl, \
-         patch("app.channels.whatsapp.analyze_image", new_callable=AsyncMock, create=True) as mock_vision:
+         patch("app.channels.whatsapp.download_whatsapp_media", new_callable=AsyncMock) as mock_dl, \
+         patch("app.vision.analyze_image", new_callable=AsyncMock) as mock_vision:
 
         mock_resolve.return_value = identity.User(name="Ruben")
         mock_dl.return_value = b"fake-image-bytes"
@@ -463,8 +463,8 @@ async def test_webhook_image_analysis_failure():
 
     with patch("app.channels.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send, \
          patch("app.identity.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve, \
-         patch("app.channels.whatsapp.download_whatsapp_media", new_callable=AsyncMock, create=True) as mock_dl, \
-         patch("app.channels.whatsapp.analyze_image", new_callable=AsyncMock, create=True) as mock_vision:
+         patch("app.channels.whatsapp.download_whatsapp_media", new_callable=AsyncMock) as mock_dl, \
+         patch("app.vision.analyze_image", new_callable=AsyncMock) as mock_vision:
 
         mock_resolve.return_value = identity.User(name="Ruben")
         mock_dl.return_value = b"fake-image-bytes"

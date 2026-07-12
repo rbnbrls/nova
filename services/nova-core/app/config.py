@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://ollama:11434"
     nova_model: str = "qwen3:14b"
     nova_embed_model: str = "nomic-embed-text"
+    nova_vision_model: str = "llava"
 
     # Database
     postgres_host: str = "postgres"
