@@ -228,7 +228,10 @@ Plans:
 3. Voice round-trip latency is acceptable when the chat model and Whisper STT run concurrently on the shared GPU
 4. Concurrent load validation: tested under real load, not idle coexistence
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 10-01-PLAN.md — Voice channel test coverage: HA proxy endpoint tests + error handling for LLM/HA unavailability
 
 ---
 
@@ -783,7 +786,7 @@ Plans:
 | 7. Evaluation Suite | 0/1 | Not started | — |
 | 8. Write Confirmation Gate | 0/0 | Not started | — |
 | 9. WhatsApp Channel | 0/0 | Not started | — |
-| 10. Voice Channel | 0/0 | Not started | — |
+| 10. Voice Channel | 0/1 | Not started | — |
 | 11. Proactive Scheduler | 0/0 | Not started | — |
 | 12. Read-Only Dashboard | 0/0 | Not started | — |
 | 13. DB Preferences & Identity Migration | 0/0 | Not started | — |
