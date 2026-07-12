@@ -168,5 +168,39 @@ async def run_migrations():
             "ALTER TABLE queued_notifications ALTER COLUMN whatsapp_number DROP NOT NULL"
         )
 
+        # --- Telegram dedup table (Phase 14) ---
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS processed_telegram_updates (
+                update_id BIGINT PRIMARY KEY,
+                processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
 
+        # Seed Telegram chat_id identities from env var
+        if settings.nova_telegram_users:
+            for entry in settings.nova_telegram_users.split(","):
+                entry = entry.strip()
+                if not entry or ":" not in entry:
+                    continue
+                chat_id, name = entry.split(":", 1)
+                chat_id = chat_id.strip()
+                name = name.strip()
+                user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", name)
+                if user_id:
+                    exists = await conn.fetchval(
+                        "SELECT 1 FROM channel_identities WHERE channel = 'telegram' AND channel_id = $1",
+                        chat_id
+                    )
+                    if not exists:
+                        await conn.execute(
+                            """
+                            INSERT INTO channel_identities (user_id, channel, channel_id)
+                            VALUES ($1, 'telegram', $2)
+                            ON CONFLICT (channel, channel_id) DO NOTHING
+                            """,
+                            user_id,
+                            chat_id
+                        )
 

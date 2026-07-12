@@ -40,11 +40,13 @@ class ChatCompletionResponse(BaseModel):
 class RequestCodeRequest(BaseModel):
     user: str
     number: str
+    channel: str = "whatsapp"
 
 
 class VerifyCodeRequest(BaseModel):
     user: str
     code: str
+    channel_id: str = ""
 
 
 class BriefingSettingsRequest(BaseModel):

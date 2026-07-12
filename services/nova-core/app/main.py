@@ -27,8 +27,10 @@ from . import llm, db
 from .agent import run_agent
 from .config import settings
 from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest
-from .security import verify_whatsapp_signature
+from .security import verify_whatsapp_signature, verify_telegram_signature
 from .channels.whatsapp import process_incoming_whatsapp
+from .channels.telegram import process_incoming_telegram
+from .db import get_pool as db_get_pool
 from .tools.calendar import _get_calendar
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -51,6 +53,29 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications")
     scheduler.add_job(check_overdue_tasks, "interval", hours=1, id="check_overdue_tasks")
     scheduler.start()
+
+    # Register Telegram bot command menu if enabled
+    if settings.telegram_enabled and settings.telegram_bot_token:
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                commands_payload = {
+                    "commands": [
+                        {"command": "help", "description": "Show what Nova can do"},
+                        {"command": "tasks", "description": "Show your current tasks"},
+                        {"command": "settings", "description": "Manage your preferences"},
+                    ]
+                }
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{settings.telegram_bot_token}/setMyCommands",
+                    json=commands_payload
+                )
+                if resp.status_code == 200:
+                    log.info("Telegram command menu registered")
+                else:
+                    log.warning(f"Telegram command registration failed: {resp.status_code}")
+        except Exception as e:
+            log.warning(f"Telegram command registration error: {e}")
     
     yield
     # Shutdown scheduler and close database pool
@@ -210,6 +235,55 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks) 
     return {"status": "accepted"}
 
 
+@app.post("/webhooks/telegram")
+async def telegram_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
+    if not settings.telegram_enabled:
+        raise HTTPException(status_code=404, detail="Telegram channel is not enabled")
+
+    body = await request.body()
+    secret_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+
+    if not verify_telegram_signature(secret_token, settings.telegram_webhook_secret):
+        raise HTTPException(status_code=401, detail="Invalid secret token")
+
+    try:
+        payload = json.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    update = payload if isinstance(payload, dict) else {}
+    msg = update.get("message", {})
+    text = msg.get("text", "")
+    chat = msg.get("chat", {})
+    chat_id = str(chat.get("id", ""))
+
+    if text and chat_id:
+        update_id = update.get("update_id")
+        if update_id is not None:
+            pool = await db_get_pool()
+            async with pool.acquire() as conn:
+                existing = await conn.fetchval(
+                    "SELECT 1 FROM processed_telegram_updates WHERE update_id = $1",
+                    update_id
+                )
+                if not existing:
+                    await conn.execute(
+                        "INSERT INTO processed_telegram_updates (update_id) VALUES ($1) ON CONFLICT DO NOTHING",
+                        update_id
+                    )
+                else:
+                    return {"status": "accepted"}
+
+        if text.startswith("/"):
+            from .channels.telegram import send_telegram_message
+            reply = _handle_telegram_command(text)
+            background_tasks.add_task(send_telegram_message, chat_id, reply)
+        else:
+            background_tasks.add_task(process_incoming_telegram, payload)
+
+    return {"status": "accepted"}
+
+
 @app.get("/api/preferences")
 async def get_preferences():
     pool = await db.get_pool()
@@ -251,49 +325,79 @@ async def request_code(req: RequestCodeRequest):
         raise HTTPException(status_code=400, detail="Invalid phone number format")
 
     pool = await db.get_pool()
-    async with pool.acquire() as conn:
-        existing_owner = await conn.fetchval(
-            """
-            SELECT u.name 
-            FROM user_preferences up
-            JOIN users u ON up.user_id = u.id
-            WHERE up.whatsapp_number = $1 AND u.name != $2
-            """,
-            clean_number,
-            req.user
-        )
-        if existing_owner:
-            raise HTTPException(
-                status_code=400,
-                detail=f"This number is already linked to {existing_owner}"
+
+    if req.channel == "telegram":
+        if not req.channel_id or not req.channel_id.strip():
+            raise HTTPException(status_code=400, detail="channel_id is required for Telegram linking")
+        async with pool.acquire() as conn:
+            existing_owner = await conn.fetchval(
+                """
+                SELECT u.name FROM channel_identities ci
+                JOIN users u ON ci.user_id = u.id
+                WHERE ci.channel = 'telegram' AND ci.channel_id = $1 AND u.name != $2
+                """,
+                req.channel_id.strip(),
+                req.user
             )
-            
+            if existing_owner:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"This Telegram account is already linked to {existing_owner}"
+                )
+    else:
+        async with pool.acquire() as conn:
+            existing_owner = await conn.fetchval(
+                """
+                SELECT u.name 
+                FROM user_preferences up
+                JOIN users u ON up.user_id = u.id
+                WHERE up.whatsapp_number = $1 AND u.name != $2
+                """,
+                clean_number,
+                req.user
+            )
+            if existing_owner:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"This number is already linked to {existing_owner}"
+                )
+
+    async with pool.acquire() as conn:
         user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", req.user)
         if not user_id:
             raise HTTPException(status_code=404, detail="User not found")
             
         code = f"{random.randint(100000, 999999)}"
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        channel_id_val = req.channel_id.strip() if req.channel == "telegram" and req.channel_id else ""
         
         await conn.execute(
             """
-            INSERT INTO channel_verification_codes (user_id, whatsapp_number, code, expires_at, channel)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO channel_verification_codes (user_id, whatsapp_number, code, expires_at, channel, channel_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
             """,
             user_id,
             clean_number,
             code,
             expires_at,
-            "whatsapp"
+            req.channel,
+            channel_id_val
         )
 
     otp_message = f"Your Nova verification code is {code}. It expires in 10 minutes."
-    try:
-        await send_whatsapp_message(clean_number, otp_message)
-    except Exception as e:
-        print(f"[ERROR] Failed to send OTP to {clean_number}: {e}")
+    if req.channel == "telegram":
+        from .channels.dispatcher import send_to_user
+        try:
+            await send_to_user(req.user, otp_message, proactive=False)
+        except Exception as e:
+            print(f"[ERROR] Failed to send Telegram OTP to {req.user}: {e}")
+    else:
+        try:
+            await send_whatsapp_message(clean_number, otp_message)
+        except Exception as e:
+            print(f"[ERROR] Failed to send OTP to {clean_number}: {e}")
 
-    print(f"[OTP STATUS] Verification code for {req.user} ({clean_number}): {code}")
+    print(f"[OTP STATUS] Verification code for {req.user} ({clean_number}, {req.channel}): {code}")
     return {"status": "code_sent"}
 
 
@@ -309,7 +413,7 @@ async def verify_code(req: VerifyCodeRequest):
             
         row = await conn.fetchrow(
             """
-            SELECT id, whatsapp_number, code, attempts, expires_at
+            SELECT id, whatsapp_number, code, attempts, expires_at, channel, channel_id
             FROM channel_verification_codes
             WHERE user_id = $1 AND attempts < 3 AND expires_at > now()
             ORDER BY created_at DESC
@@ -332,15 +436,37 @@ async def verify_code(req: VerifyCodeRequest):
         if row["code"] != req.code.strip():
             raise HTTPException(status_code=400, detail="Incorrect verification code")
             
-        await conn.execute(
-            """
-            INSERT INTO user_preferences (user_id, whatsapp_number)
-            VALUES ($1, $2)
-            ON CONFLICT (user_id) DO UPDATE SET whatsapp_number = EXCLUDED.whatsapp_number
-            """,
-            user_id,
-            row["whatsapp_number"]
-        )
+        if row["channel"] == "telegram":
+            channel_id_val = row["channel_id"]
+            if channel_id_val:
+                await conn.execute(
+                    """
+                    INSERT INTO channel_identities (user_id, channel, channel_id)
+                    VALUES ($1, 'telegram', $2)
+                    ON CONFLICT (channel, channel_id) DO UPDATE SET channel_id = EXCLUDED.channel_id
+                    """,
+                    user_id,
+                    str(channel_id_val)
+                )
+                await conn.execute(
+                    """
+                    UPDATE user_preferences SET channels_enabled = ARRAY_APPEND(
+                        COALESCE(channels_enabled, '{}'),
+                        'telegram'
+                    ) WHERE user_id = $1 AND NOT ('telegram' = ANY(COALESCE(channels_enabled, '{}')))
+                    """,
+                    user_id
+                )
+        else:
+            await conn.execute(
+                """
+                INSERT INTO user_preferences (user_id, whatsapp_number)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET whatsapp_number = EXCLUDED.whatsapp_number
+                """,
+                user_id,
+                row["whatsapp_number"]
+            )
         
         await conn.execute(
             "UPDATE channel_verification_codes SET attempts = 99 WHERE id = $1",
@@ -426,6 +552,33 @@ async def save_dnd_preferences(req: DNDSettingsRequest):
         )
         
     return {"status": "success"}
+
+
+def _handle_telegram_command(text: str) -> str:
+    """Handle Telegram bot commands. Returns the reply text."""
+    cmd = text.split()[0].lower()
+    if cmd == "/help":
+        return (
+            "\U0001f916 I'm Nova, your household assistant.\n\n"
+            "I can help with:\n"
+            "\U0001f4cb Tasks — add, list, complete household tasks\n"
+            "\U0001f4c5 Calendar — check your schedule and events\n"
+            "\U0001f4e8 Email — get important email notifications\n"
+            "\u23f0 Briefings — morning and weekly summaries\n\n"
+            "Just ask me anything! For example:\n"
+            '• "What\'s on my calendar today?"\n'
+            '• "Add milk to the shopping list"\n'
+            '• "What tasks are overdue?"\n\n'
+            "Commands:\n"
+            "/help — Show this message\n"
+            "/tasks — Show your current tasks\n"
+            "/settings — Manage your preferences"
+        )
+    elif cmd == "/tasks":
+        return "Task management coming soon. Try asking 'What are my tasks?' in the meantime."
+    elif cmd == "/settings":
+        return "Preferences management coming soon. Use the web dashboard to adjust your settings."
+    return f"Unknown command: {cmd}. Try /help."
 
 
 import os

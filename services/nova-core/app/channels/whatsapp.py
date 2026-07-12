@@ -81,8 +81,8 @@ async def _send_to_number(to_number: str, text: str, proactive: bool, user_name:
                     user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", user.name)
                     if user_id:
                         await conn.execute(
-                            """INSERT INTO queued_notifications (user_id, whatsapp_number, message_text)
-                               VALUES ($1, $2, $3)""",
+                            """INSERT INTO queued_notifications (user_id, whatsapp_number, message_text, channel)
+                               VALUES ($1, $2, $3, 'whatsapp')""",
                             user_id, to_number.lstrip("+"), text
                         )
             except Exception as e:
@@ -182,6 +182,10 @@ async def process_incoming_whatsapp(payload: dict):
         pool = await get_pool()
         async with pool.acquire() as conn:
             await conn.execute("UPDATE users SET last_inbound_at = now() WHERE name = $1", user.name)
+            await conn.execute(
+                "UPDATE user_preferences SET last_active_channel = 'whatsapp' WHERE user_id = (SELECT id FROM users WHERE name = $1)",
+                user.name
+            )
     except Exception as e:
         print(f"[ERROR] Failed to update last_inbound_at: {e}")
 

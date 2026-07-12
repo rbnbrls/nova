@@ -9,39 +9,39 @@ Requirements for Milestone v3.0 Multi-Channel Support. Each maps to roadmap phas
 
 ### Telegram Channel Foundation
 
-- [ ] **TGBOT-01**: User can message Nova via Telegram and receive a reply (full agent-loop parity with WhatsApp)
-- [ ] **TGBOT-02**: Telegram webhook verifies the `X-Telegram-Bot-Api-Secret-Token` header with constant-time comparison
-- [ ] **TGBOT-03**: Telegram `update_id` deduplication prevents duplicate agent executions on webhook retries
-- [ ] **TGBOT-04**: Nova sends replies to the user's Telegram chat_id (outbound `sendMessage`)
+- [x] **TGBOT-01**: User can message Nova via Telegram and receive a reply (full agent-loop parity with WhatsApp)
+- [x] **TGBOT-02**: Telegram webhook verifies the `X-Telegram-Bot-Api-Secret-Token` header with constant-time comparison
+- [x] **TGBOT-03**: Telegram `update_id` deduplication prevents duplicate agent executions on webhook retries
+- [x] **TGBOT-04**: Nova sends replies to the user's Telegram chat_id (outbound `sendMessage`)
 
 ### Channel Preferences & Identity
 
 - [x] **CHAN-01**: User's channel preference (Telegram, WhatsApp, or both) is stored in Postgres `user_preferences`
 - [x] **CHAN-02**: `channel_identities` table maps Telegram chat_ids and WhatsApp phone numbers to household users
-- [ ] **CHAN-03**: Both inbound channels update `last_active_channel` atomically on every user message
+- [x] **CHAN-03**: Both inbound channels update `last_active_channel` atomically on every user message
 
 ### Push Gateway Refactor
 
-- [ ] **PUSH-01**: Morning briefing, weekly briefing, task reminders, and email alerts route to the user's last-active channel (not hardcoded to WhatsApp)
-- [ ] **PUSH-02**: DND-deferred messages queue and deliver to the correct channel when DND window ends
-- [ ] **PUSH-03**: A `NOVA_TELEGRAM_ENABLED` feature flag gates all new Telegram behavior; default OFF keeps WhatsApp-only safe
+- [x] **PUSH-01**: Morning briefing, weekly briefing, task reminders, and email alerts route to the user's last-active channel (not hardcoded to WhatsApp)
+- [x] **PUSH-02**: DND-deferred messages queue and deliver to the correct channel when DND window ends
+- [x] **PUSH-03**: A `NOVA_TELEGRAM_ENABLED` feature flag gates all new Telegram behavior; default OFF keeps WhatsApp-only safe
 
 ### Telegram Formatting
 
-- [ ] **TGFORMAT-01**: Telegram messages use HTML parse mode (not MarkdownV2) — bold, italic, links render correctly
-- [ ] **TGFORMAT-02**: Messages exceeding 4096 characters are chunked at paragraph boundaries with 1-second inter-chunk delays
+- [x] **TGFORMAT-01**: Telegram messages use HTML parse mode (not MarkdownV2) — bold, italic, links render correctly
+- [x] **TGFORMAT-02**: Messages exceeding 4096 characters are chunked at paragraph boundaries with 1-second inter-chunk delays
 
 ### Telegram Onboarding
 
-- [ ] **TGOTP-01**: User initiates Telegram linking from the dashboard by selecting their household identity
-- [ ] **TGOTP-02**: Dashboard sends a verification code as a Telegram message; user confirms the code on the dashboard
-- [ ] **TGOTP-03**: Verification codes are single-use, time-limited, rate-limited, and reject already-linked chat_ids
-- [ ] **TGOTP-04**: User with an existing linked Telegram account can re-link/replace with a new chat_id
+- [x] **TGOTP-01**: User initiates Telegram linking from the dashboard by selecting their household identity
+- [x] **TGOTP-02**: Dashboard sends a verification code as a Telegram message; user confirms the code on the dashboard
+- [x] **TGOTP-03**: Verification codes are single-use, time-limited, rate-limited, and reject already-linked chat_ids
+- [x] **TGOTP-04**: User with an existing linked Telegram account can re-link/replace with a new chat_id
 
 ### Telegram Bot Commands
 
-- [ ] **CMD-01**: Bot registers a `/help`, `/tasks`, `/settings` command menu via `setMyCommands`
-- [ ] **CMD-02**: `/help` returns a text summary of Nova's capabilities
+- [x] **CMD-01**: Bot registers a `/help`, `/tasks`, `/settings` command menu via `setMyCommands`
+- [x] **CMD-02**: `/help` returns a text summary of Nova's capabilities
 
 ## v2 Requirements
 
@@ -64,26 +64,27 @@ Requirements for Milestone v3.0 Multi-Channel Support. Each maps to roadmap phas
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TGBOT-01 | Phase 14 | Pending |
-| TGBOT-02 | Phase 14 | Pending |
-| TGBOT-03 | Phase 14 | Pending |
-| TGBOT-04 | Phase 14 | Pending |
+| TGBOT-01 | Phase 14 | Complete |
+| TGBOT-02 | Phase 14 | Complete |
+| TGBOT-03 | Phase 14 | Complete |
+| TGBOT-04 | Phase 14 | Complete |
 | CHAN-01 | Phase 13 | Complete — Plans 13-01/13-02 |
 | CHAN-02 | Phase 13 | Complete — Plans 13-01/13-02 |
-| CHAN-03 | Phase 15 | Pending |
-| PUSH-01 | Phase 16 | Pending |
-| PUSH-02 | Phase 16 | Pending |
-| PUSH-03 | Phase 14 | Pending |
-| TGFORMAT-01 | Phase 14 | Pending |
-| TGFORMAT-02 | Phase 14 | Pending |
-| TGOTP-01 | Phase 17 | Pending |
-| TGOTP-02 | Phase 17 | Pending |
-| TGOTP-03 | Phase 17 | Pending |
-| TGOTP-04 | Phase 17 | Pending |
-| CMD-01 | Phase 14 | Pending |
-| CMD-02 | Phase 14 | Pending |
+| CHAN-03 | Phase 15 | Complete |
+| PUSH-01 | Phase 16 | Complete |
+| PUSH-02 | Phase 16 | Complete |
+| PUSH-03 | Phase 14 | Complete |
+| TGFORMAT-01 | Phase 14 | Complete |
+| TGFORMAT-02 | Phase 14 | Complete |
+| TGOTP-01 | Phase 17 | Complete |
+| TGOTP-02 | Phase 17 | Complete |
+| TGOTP-03 | Phase 17 | Complete |
+| TGOTP-04 | Phase 17 | Complete |
+| CMD-01 | Phase 14 | Complete |
+| CMD-02 | Phase 14 | Complete |
 
 **Coverage:**
+
 - v3.0 requirements: 18 total
 - Mapped to phases: 18 ✓
 - Unmapped: 0

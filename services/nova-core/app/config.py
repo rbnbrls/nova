@@ -42,7 +42,11 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str = ""
     whatsapp_verify_token: str = ""
 
-
+    # Telegram
+    telegram_bot_token: str = ""
+    telegram_webhook_secret: str = ""
+    telegram_enabled: bool = False
+    nova_telegram_users: str = ""
 
     @property
     def database_url(self) -> str:

@@ -63,11 +63,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 10: Per-User Do Not Disturb** - Per-user DND windows suppress/defer proactive pushes without ever touching inbound chat (completed 2026-07-12)
 - [x] **Phase 11: Reliability Hardening** - Chat path survives transient Ollama failures, slow/looping turns, and long conversations — friendly fallback instead of a raw 500, never an unbounded request
 - [x] **Phase 12: Security Hardening** - The chat API verifies callers before trusting user attribution, and ops-bridge checks its token in constant time
-- [ ] **Phase 13: Foundation — DB Schema & Channel Adapter Skeleton** - Additive DB migrations for multi-channel support; WhatsApp refactored into `channels/whatsapp.py` conforming to `ChannelAdapter` interface
-- [ ] **Phase 14: Telegram Bot Foundation** - Telegram bot with full inbound→agent→outbound chat loop, webhook security, command menu, HTML formatting, and message chunking
-- [ ] **Phase 15: Multi-Channel Identity & Last-Active Tracking** - Both inbound channels update `last_active_channel` atomically; identity resolution via `channel_identities` table
-- [ ] **Phase 16: Push Gateway Refactor** - All 5 scheduler call sites route through `dispatcher.send_to_user()` based on last-active channel; DND queue uses dispatcher pattern
-- [ ] **Phase 17: Telegram OTP Self-Service Linking** - Users link their Telegram account via dashboard-initiated, Telegram-delivered verification codes
+- [x] **Phase 13: Foundation — DB Schema & Channel Adapter Skeleton** - Additive DB migrations for multi-channel support; WhatsApp refactored into `channels/whatsapp.py` conforming to `ChannelAdapter` interface (completed 2026-07-12)
+- [x] **Phase 14: Telegram Bot Foundation** - Telegram bot with full inbound→agent→outbound chat loop, webhook security, command menu, HTML formatting, and message chunking (completed 2026-07-12)
+- [x] **Phase 15: Multi-Channel Identity & Last-Active Tracking** - Both inbound channels update `last_active_channel` atomically; identity resolution via `channel_identities` table (completed 2026-07-12)
+- [x] **Phase 16: Push Gateway Refactor** - All 5 scheduler call sites route through `dispatcher.send_to_user()` based on last-active channel; DND queue uses dispatcher pattern (completed 2026-07-12)
+- [x] **Phase 17: Telegram OTP Self-Service Linking** - Users link their Telegram account via dashboard-initiated, Telegram-delivered verification codes (completed 2026-07-12)
 
 ## Phase Details
 
@@ -258,9 +258,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 13-01-PLAN.md — DB Schema Migrations (additive-only columns, channel_identities, table rename, queued_notifications changes)
+
+- [x] 13-01-PLAN.md — DB Schema Migrations (additive-only columns, channel_identities, table rename, queued_notifications changes)
 - [x] 13-02-PLAN.md — Channel Adapter Package (ChannelAdapter ABC, InboundMessage, skeleton dispatcher/router/identity)
-- [ ] 13-03-PLAN.md — WhatsApp Adapter Refactor (WhatsAppAdapter class, compat shim, import updates)
+- [x] 13-03-PLAN.md — WhatsApp Adapter Refactor (WhatsAppAdapter class, compat shim, import updates)
 
 ### Phase 14: Telegram Bot Foundation
 
@@ -341,8 +342,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 10. Per-User Do Not Disturb | 1/1 | Complete | 2026-07-12 |
 | 11. Reliability Hardening | 1/1 | Complete | 2026-07-12 |
 | 12. Security Hardening | 1/1 | Complete | 2026-07-12 |
-| 13. Foundation — DB Schema & Channel Adapter Skeleton | 2/3 | In Progress | 2026-07-12 |
-| 14. Telegram Bot Foundation | 0/0 | Not started | - |
-| 15. Multi-Channel Identity & Last-Active Tracking | 0/0 | Not started | - |
-| 16. Push Gateway Refactor | 0/0 | Not started | - |
-| 17. Telegram OTP Self-Service Linking | 0/0 | Not started | - |
+| 13. Foundation — DB Schema & Channel Adapter Skeleton | 3/3 | Complete    | 2026-07-12 |
+| 14. Telegram Bot Foundation | 3/3 | Complete    | 2026-07-12 |
+| 15. Multi-Channel Identity & Last-Active Tracking | 1/1 | Complete    | 2026-07-12 |
+| 16. Push Gateway Refactor | 1/1 | Complete    | 2026-07-12 |
+| 17. Telegram OTP Self-Service Linking | 1/1 | Complete    | 2026-07-12 |
