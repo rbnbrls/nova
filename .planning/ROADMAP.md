@@ -768,16 +768,21 @@ Plans:
 
 **Depends on**: Phase 9 (WhatsApp inbound media), Phase 4 (task tooling), Phase 5 (calendar tooling)
 
-**Requirements**: TBD
+**Requirements**: PHOTO-IMG, PHOTO-VISION, PHOTO-EXTRACT, PHOTO-CONFIRM
 
 **Success Criteria:**
 
 1. A WhatsApp photo of a letter with a date produces a correct proposed calendar event and task
-2. A warranty receipt photo is OCR'd and filed into searchable household documentation
+2. A warranty receipt photo is OCR'd and filed into searchable household documentation *(deferred per CONTEXT.md — SC #2)*
 3. All image processing runs locally on the GPU — no cloud vision API calls
 4. User confirms extracted actions before creation (extends Phase 8 confirmation pattern)
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 37-01-PLAN.md — Image download & vision analysis pipeline (Wave 1)
+- [ ] 37-02-PLAN.md — process_photo tool, confirmation extension, end-to-end wiring & tests (Wave 2)
+
 **UI hint**: yes
 
 ---
@@ -801,7 +806,7 @@ Plans:
 | 11. Proactive Scheduler | 1/1 | Complete    | 2026-07-12 |
 | 12. Read-Only Dashboard | 1/1 | Complete    | 2026-07-12 |
 | 13. DB Preferences & Identity Migration | 1/1 | Complete    | 2026-07-12 |
-| 14. WhatsApp OTP Self-Service Linking | 1/1 | Complete | 2026-07-12 |
+| 14. WhatsApp OTP Self-Service Linking | 1/1 | Complete    | 2026-07-12 |
 | 15. Per-User Dynamic Scheduling | 0/0 | Not started | — |
 | 16. Per-User Do Not Disturb | 0/0 | Not started | — |
 | 17. Reliability Hardening | 0/0 | Not started | — |
@@ -824,4 +829,4 @@ Plans:
 | 34. Deeper Email & Calendar Intelligence | 0/0 | Not started | — |
 | 35. Home Assistant as a Tool | 0/0 | Not started | — |
 | 36. Write-Action Audit Trail | 0/0 | Not started | — |
-| 37. Paper & Photo Intake | 0/0 | Not started | — |
+| 37. Paper & Photo Intake | 0/2 | In progress | — |
