@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     nova_env: str = "development"
     nova_log_level: str = "INFO"
     nova_timezone: str = "Europe/Amsterdam"
+    nova_api_token: str = ""
 
     # LLM (Ollama)
     ollama_base_url: str = "http://ollama:11434"

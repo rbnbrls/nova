@@ -10,7 +10,15 @@ Channel webhooks (WhatsApp, Phase 4) will be added under /webhooks/*.
 """
 from __future__ import annotations
 
+import asyncio
+import hmac
+import json
+import logging
+import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+import zoneinfo
+
 from fastapi import FastAPI, Request, Query, BackgroundTasks, Response, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,15 +28,13 @@ from .agent import run_agent
 from .config import settings
 from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice
 from .security import verify_whatsapp_signature
-
-
 from .whatsapp import process_incoming_whatsapp
-
-
-
+from .tools.calendar import _get_calendar
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks
+
+log = logging.getLogger("nova-core")
 
 scheduler = AsyncIOScheduler()
 
@@ -61,13 +67,23 @@ async def health() -> dict:
 
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
-async def chat_completions(req: ChatCompletionRequest, user: str | None = None) -> ChatCompletionResponse:
+async def chat_completions(req: ChatCompletionRequest, request: Request, user: str | None = None) -> ChatCompletionResponse:
     """Run the agent loop for the latest user message and return the reply."""
+    if settings.nova_api_token:
+        import hmac
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer ") or not hmac.compare_digest(auth[7:], settings.nova_api_token):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
     resolved_user = user or req.user or "household"
     history = [m.model_dump() for m in req.messages[:-1]]
     last = req.messages[-1].content if req.messages else ""
 
-    reply = await run_agent(last, user=resolved_user, history=history)
+    try:
+        reply = await run_agent(last, user=resolved_user, history=history)
+    except Exception as e:
+        print(f"[ERROR] Agent loop failed: {e}")
+        reply = "Nova is having trouble right now, please try again later."
 
     return ChatCompletionResponse(
         model=req.model or settings.nova_model,

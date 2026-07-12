@@ -1,9 +1,15 @@
 """Thin async client for Ollama's chat API (with tool-calling support)."""
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 
 from .config import settings
+
+# Kept well below agent.py's whole-turn asyncio.timeout(60) so a slow-but-alive
+# Ollama can still be retried at least once within the turn's overall budget.
+_REQUEST_TIMEOUT = 20
 
 
 async def chat(
@@ -24,10 +30,23 @@ async def chat(
     if tools:
         payload["tools"] = tools
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(f"{settings.ollama_base_url}/api/chat", json=payload)
-        resp.raise_for_status()
-        return resp.json()["message"]
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
+                resp = await client.post(f"{settings.ollama_base_url}/api/chat", json=payload)
+                resp.raise_for_status()
+                return resp.json()["message"]
+        except httpx.HTTPStatusError as exc:
+            # Only retry transient server-side failures; a 4xx means retrying
+            # the identical request will just fail identically again.
+            if exc.response.status_code < 500 or attempt == max_retries - 1:
+                raise
+            await asyncio.sleep(2 ** attempt)
+        except httpx.RequestError:
+            if attempt == max_retries - 1:
+                raise
+            await asyncio.sleep(2 ** attempt)
 
 
 async def is_ready() -> bool:

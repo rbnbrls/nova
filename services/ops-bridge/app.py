@@ -66,7 +66,8 @@ async def openobserve_alert(
     request: Request,
     x_bridge_token: str | None = Header(default=None),
 ) -> dict:
-    if not BRIDGE_TOKEN or x_bridge_token != BRIDGE_TOKEN:
+    import hmac
+    if not BRIDGE_TOKEN or not x_bridge_token or not hmac.compare_digest(x_bridge_token, BRIDGE_TOKEN):
         raise HTTPException(status_code=401, detail="bad or missing X-Bridge-Token")
 
     try:
