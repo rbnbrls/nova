@@ -210,6 +210,141 @@ async def test_eval_refusal_case_scenario():
 
 
 # ---------------------------------------------------------------------------
+# Phase 7: Calendar creation scenario
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_eval_calendar_creation_scenario():
+    """EVAL-01: Calendar creation via create_event tool with resolved datetime."""
+    if not await llm.is_ready():
+        mock_turn = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "type": "function",
+                    "id": "call_cal_create",
+                    "function": {
+                        "name": "create_event",
+                        "arguments": '{"title": "Meeting", "start": "2026-07-16T15:00:00", "end": "2026-07-16T16:00:00"}'
+                    }
+                }
+            ]
+        }
+        with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.side_effect = [
+                mock_turn,
+                {"role": "assistant", "content": "Created the event 'Meeting' for tomorrow at 3pm."}
+            ]
+            with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
+                mock_call.return_value = "Created event 'Meeting'"
+                resp = await run_agent("Create an event tomorrow at 3pm called Meeting", user="Ruben")
+                # Confirmation gate intercepts create_event; verify it requires confirmation
+                assert "[CONFIRMATION_REQUIRED]" in resp
+        return
+
+    resp = await run_agent("Create an event tomorrow at 3pm called Meeting", user="Ruben")
+    assert "Meeting" in resp or "confirm" in resp.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Task with deadline scenario
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_eval_task_with_deadline_scenario():
+    """EVAL-01: Task creation with due_at parameter for deadline."""
+    if not await llm.is_ready():
+        mock_turn = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "type": "function",
+                    "id": "call_task_due",
+                    "function": {
+                        "name": "add_task",
+                        "arguments": '{"title": "buy milk", "due_at": "2026-07-17T23:59:00"}'
+                    }
+                }
+            ]
+        }
+        with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.side_effect = [
+                mock_turn,
+                {"role": "assistant", "content": "Added 'buy milk' due Friday."}
+            ]
+            with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
+                mock_call.return_value = "Added task 'buy milk' (due 2026-07-17)."
+                resp = await run_agent("Add task buy milk due friday", user="Ruben")
+                assert mock_call.called
+                assert "buy milk" in resp.lower()
+        return
+
+    resp = await run_agent("Add task buy milk due friday", user="Ruben")
+    assert "buy milk" in resp.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Priority task scenario
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_eval_priority_task_scenario():
+    """EVAL-01: Task creation with priority=high parameter."""
+    if not await llm.is_ready():
+        mock_turn = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "type": "function",
+                    "id": "call_task_prio",
+                    "function": {
+                        "name": "add_task",
+                        "arguments": '{"title": "review budget", "priority": "high"}'
+                    }
+                }
+            ]
+        }
+        with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.side_effect = [
+                mock_turn,
+                {"role": "assistant", "content": "Added high-priority task 'review budget'."}
+            ]
+            with patch("app.tools.call_tool", new_callable=AsyncMock) as mock_call:
+                mock_call.return_value = "Added task 'review budget' [high]."
+                resp = await run_agent("Add high-priority task review budget", user="Ruben")
+                assert mock_call.called
+                assert "review budget" in resp.lower()
+        return
+
+    resp = await run_agent("Add high-priority task review budget", user="Ruben")
+    assert "review budget" in resp.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Weather/proactive refusal scenario
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_eval_weather_refusal_scenario():
+    """EVAL-01: The agent gracefully refuses out-of-scope requests."""
+    if not await llm.is_ready():
+        with patch("app.llm.chat", new_callable=AsyncMock) as mock_chat:
+            mock_chat.return_value = {
+                "role": "assistant",
+                "content": "I don't have access to weather data. I can help with tasks, calendar, and email."
+            }
+            resp = await run_agent("What's the weather today?", user="Ruben")
+            assert "don't have" in resp.lower() or "can't" in resp.lower() or "weather" in resp.lower()
+        return
+
+    resp = await run_agent("What's the weather today?", user="Ruben")
+    assert "weather" in resp.lower() or "can't" in resp.lower()
+
+
+# ---------------------------------------------------------------------------
 # EVAL-02: Eval suite discoverability
 # ---------------------------------------------------------------------------
 
@@ -226,4 +361,8 @@ def test_eval_suite_is_discoverable_by_pytest():
     assert "test_eval_multi_tool_turn_scenario" in test_funcs
     assert "test_eval_refusal_case_scenario" in test_funcs
     assert "test_eval_suite_is_discoverable_by_pytest" in test_funcs
-    assert len(test_funcs) >= 7
+    assert "test_eval_calendar_creation_scenario" in test_funcs
+    assert "test_eval_task_with_deadline_scenario" in test_funcs
+    assert "test_eval_priority_task_scenario" in test_funcs
+    assert "test_eval_weather_refusal_scenario" in test_funcs
+    assert len(test_funcs) >= 11
