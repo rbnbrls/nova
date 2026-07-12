@@ -23,6 +23,7 @@ def test_get_preferences(client):
             "weekly_briefing_enabled": True,
             "weekly_briefing_day": 1,
             "weekly_briefing_time": datetime.strptime("09:00", "%H:%M").time(),
+            "channels_enabled": ["whatsapp"],
         },
         {
             "name": "Meral",
@@ -35,6 +36,7 @@ def test_get_preferences(client):
             "weekly_briefing_enabled": False,
             "weekly_briefing_day": None,
             "weekly_briefing_time": None,
+            "channels_enabled": [],
         }
     ]
     mock_conn = AsyncMock()
@@ -63,7 +65,7 @@ def test_request_code_success(client):
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
     
     with patch("app.main.db.get_pool", new_callable=AsyncMock) as mock_get_pool, \
-         patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send_wa:
+         patch("app.channels.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send_wa:
         mock_get_pool.return_value = mock_pool
         
         resp = client.post(
@@ -104,6 +106,9 @@ def test_request_code_reject_already_linked(client):
 
 def test_verify_code_success(client):
     mock_conn = AsyncMock()
+    mock_conn.transaction = MagicMock()
+    mock_conn.transaction.return_value.__aenter__ = AsyncMock()
+    mock_conn.transaction.return_value.__aexit__ = AsyncMock()
     # user_id, active code row
     mock_conn.fetchval.return_value = "ruben-user-uuid"
     mock_conn.fetchrow.return_value = {
@@ -111,7 +116,9 @@ def test_verify_code_success(client):
         "whatsapp_number": "31612345678",
         "code": "123456",
         "attempts": 0,
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5)
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+        "channel": "whatsapp",
+        "channel_id": "31612345678"
     }
     mock_pool = MagicMock()
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
@@ -128,10 +135,11 @@ def test_verify_code_success(client):
         
         # Verify attempts increment and linking
         calls = mock_conn.execute.call_args_list
-        assert len(calls) == 3
+        assert len(calls) == 4
         assert "UPDATE channel_verification_codes SET attempts = attempts + 1" in calls[0][0][0]
         assert "INSERT INTO user_preferences" in calls[1][0][0]
-        assert "UPDATE channel_verification_codes SET attempts = 99" in calls[2][0][0]
+        assert "INSERT INTO channel_identities" in calls[2][0][0]
+        assert "UPDATE channel_verification_codes SET attempts = 99" in calls[3][0][0]
 
 
 def test_verify_code_incorrect_attempts_exceeded(client):

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.identity import is_user_in_dnd, User
 from app.channels.whatsapp import send_whatsapp_message
+from app.channels.dispatcher import send_to_user
 from app.scheduler import process_queued_notifications
 from app.main import app
 
@@ -57,18 +58,19 @@ async def test_proactive_queued_during_dnd():
     mock_pool = MagicMock()
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
     
-    with patch("app.channels.whatsapp.get_pool", new_callable=AsyncMock) as mock_get_pool, \
-         patch("app.channels.whatsapp.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve, \
+    with patch("app.channels.dispatcher.get_pool", new_callable=AsyncMock) as mock_dispatcher_pool, \
+         patch("app.channels.whatsapp.get_pool", new_callable=AsyncMock) as mock_whatsapp_pool, \
          patch("app.identity.is_user_in_dnd", new_callable=AsyncMock) as mock_dnd, \
          patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
          
-        mock_get_pool.return_value = mock_pool
-        mock_resolve.return_value = User(name="Ruben")
-        mock_conn.fetchval.return_value = "ruben-user-uuid"
+        mock_dispatcher_pool.return_value = mock_pool
+        mock_whatsapp_pool.return_value = mock_pool
+        mock_conn.fetchrow.side_effect = [{"last_active_channel": "whatsapp"}]
+        mock_conn.fetchval.side_effect = ["ruben-user-uuid", "31612345678"]
         
         # 1. Proactive send during DND -> Queues, doesn't send HTTP
         mock_dnd.return_value = True
-        await send_whatsapp_message("31612345678", "Proactive briefing alert", proactive=True)
+        await send_to_user("Ruben", "Proactive briefing alert", proactive=True)
         
         mock_conn.execute.assert_called_once()
         args = mock_conn.execute.call_args[0]
@@ -80,10 +82,12 @@ async def test_proactive_queued_during_dnd():
         
         # Reset mock
         mock_conn.execute.reset_mock()
+        mock_conn.fetchrow.side_effect = [{"last_active_channel": "whatsapp"}, {"whatsapp_number": "31612345678"}]
+        mock_conn.fetchval.side_effect = ["ruben-user-uuid", "31612345678"]
         
         # 2. Non-proactive send (chatbot reply) during DND -> Bypasses DND, sends HTTP immediately
         mock_dnd.return_value = True
-        await send_whatsapp_message("31612345678", "Instant bot response", proactive=False)
+        await send_to_user("Ruben", "Instant bot response", proactive=False)
         mock_conn.execute.assert_not_called()
         # Since settings mock/credentials are unset in testing, it logs to console without http post call, which is correct
 
@@ -122,7 +126,7 @@ async def test_process_queued_notifications_flush():
     mock_conn = AsyncMock()
     # Return a queued row
     mock_conn.fetch.return_value = [
-        {"id": "queue-1", "whatsapp_number": "31612345678", "message_text": "Queued alert text", "name": "Ruben"}
+        {"id": "queue-1", "whatsapp_number": "31612345678", "message_text": "Queued alert text", "name": "Ruben", "channel": "whatsapp"}
     ]
     mock_pool = MagicMock()
     mock_pool.acquire.return_value.__aenter__.return_value = mock_conn

@@ -23,6 +23,8 @@ RUN pytest
 FROM base
 COPY app ./app
 COPY static ./static
+COPY alembic.ini .
+COPY alembic ./alembic
 COPY staging-entrypoint.sh .
 RUN chmod +x staging-entrypoint.sh
 

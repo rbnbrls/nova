@@ -57,9 +57,10 @@ def test_dashboard_events_query(client):
 
 
 def test_dashboard_stream_sse(client):
-    # Mock tasks and events data
+    # Mock tasks, events, and audit data
     mock_tasks = {"tasks": [{"title": "Clean room", "due_at": None, "assignee": "Ruben"}]}
     mock_events = {"events": []}
+    mock_audit = {"audit": []}
     
     from fastapi.responses import StreamingResponse
     
@@ -73,10 +74,12 @@ def test_dashboard_stream_sse(client):
             
     with patch("app.main.dashboard_tasks", new_callable=AsyncMock) as mock_tasks_call, \
          patch("app.main.dashboard_events", new_callable=AsyncMock) as mock_events_call, \
+         patch("app.main.dashboard_audit", new_callable=AsyncMock) as mock_audit_call, \
          patch("app.main.StreamingResponse", new=DummyStreamingResponse):
          
         mock_tasks_call.return_value = mock_tasks
         mock_events_call.return_value = mock_events
+        mock_audit_call.return_value = mock_audit
         
         # We can read the first line of the stream response to verify EventStream format
         with client.stream("GET", "/dashboard/stream") as response:
