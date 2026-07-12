@@ -81,6 +81,16 @@ async def run_migrations():
                             user_id,
                             number
                         )
+                        # Mirror WhatsApp number into channel_identities for unified resolution
+                        await conn.execute(
+                            """
+                            INSERT INTO channel_identities (user_id, channel, channel_id)
+                            VALUES ($1, 'whatsapp', $2)
+                            ON CONFLICT (channel, channel_id) DO NOTHING
+                            """,
+                            user_id,
+                            number
+                        )
 
         if settings.nova_telegram_users:
             for entry in settings.nova_telegram_users.split(","):

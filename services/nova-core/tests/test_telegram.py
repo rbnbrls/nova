@@ -211,10 +211,35 @@ class TestProcessIncomingTelegram:
             mock_send.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_empty_text_skipped(self):
+    async     def test_empty_text_skipped(self):
         with patch("app.channels.telegram._send_to_chat_id", new_callable=AsyncMock) as mock_send:
             await process_incoming_telegram({"update_id": 1, "message": {"chat": {"id": 123}}})
             mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_telegram_last_active_update_atomic(self):
+        """process_incoming_telegram wraps last-active UPDATEs in conn.transaction()."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from app.channels.telegram import process_incoming_telegram
+        from app import identity
+
+        mock_conn = AsyncMock()
+        mock_conn.transaction.return_value = AsyncMock()
+        mock_conn.transaction.return_value.__aenter__.return_value = None
+
+        mock_pool = MagicMock()
+        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+        with patch("app.channels.telegram.user_from_telegram", new_callable=AsyncMock) as mock_resolve, \
+             patch("app.channels.telegram.run_agent", new_callable=AsyncMock) as mock_agent, \
+             patch("app.channels.telegram._send_to_chat_id", new_callable=AsyncMock) as mock_send, \
+             patch("app.channels.telegram.get_pool", return_value=mock_pool):
+            mock_resolve.return_value = identity.User(name="Ruben")
+            mock_agent.return_value = "Hi!"
+            await process_incoming_telegram(_make_telegram_update(text="Hello"))
+
+        # Verify transaction() context manager was used
+        mock_conn.transaction.assert_called_once()
 
 
 class TestTelegramCommands:

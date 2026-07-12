@@ -3,16 +3,17 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Ready to plan
-last_updated: "2026-07-12T17:20:00.000Z"
+last_updated: "2026-07-12T15:45:30.000Z"
 progress:
   total_phases: 37
-  completed_phases: 24
-  total_plans: 32
-  completed_plans: 31
-  percent: 69
+  completed_phases: 28
+  total_plans: 36
+  completed_plans: 33
+  percent: 76
 stopped_at: null
 current_phase: 36
 current_phase_name: Phase 36 — Write-Action Audit Trail
+current_plan: 01
 ---
 
 # Project State
@@ -133,6 +134,9 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 - Explicit ?user= query param takes precedence over room resolution
 - Room defaults to 'default' when neither query param nor body field provided
 
+- Import Request, BackgroundTasks, HTTPException at telegram.py module level so FastAPI can resolve type annotations with `from __future__ import annotations`
+- Use module-level `get_pool` in `register_webhooks` handler (already imported) instead of re-importing inside closure
+
 - Each retry attempt logs a warning with attempt number, max retries, exception, and delay — both for HTTPStatusError (5xx) and RequestError branches. (17-01)
 - Per-turn wall-clock timeout default raised from 60s to 120s to accommodate up to 3 retries. (17-01)
 
@@ -177,14 +181,28 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Plans executed:** 3
 **Commits:** f5ef4b1, 26e84b5, ec2b979, e114a30, 8224831
 
-### This session
+### Prior session
 
 **Started:** 2026-07-12T15:11:16Z
 **Completed:** 2026-07-12T17:20:00Z
 **Plans executed:** 5 (19-01, 28-01, 28-02, 27-01, 27-02)
 **Commits:** 9bd21a6, bf28ce4, 448a7e5, 8171608, 9bbe99a, c97cec9, 9eb2e76, 2ca58cd, eacf997, f507b93, 83a727e, 2356134, d381ae9
 
+### This session
+
+**Started:** 2026-07-12T15:26:55Z
+**Completed:** 2026-07-12T15:32:05Z
+**Plans executed:** 1 (20-01)
+**Commits:** dc69116, d197693
+
+### Session 2026-07-12T15:42:13Z
+
+**Started:** 2026-07-12T15:42:13Z
+**Completed:** 2026-07-12T15:44:35Z
+**Plans executed:** 1 (23-01)
+**Commits:** 0837e8a, 9b5f2a3, 1569d50
+
 ## Operator Next Steps
 
-- Next: Phase 28 — Staging Lane & Model Upgrades
+- Next: Phase 24 — Telegram DND Queuing
 - Old milestone artifacts in `.planning/milestones/` serve as implementation reference

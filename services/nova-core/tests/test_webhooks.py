@@ -509,3 +509,48 @@ async def test_webhook_authorized_number_success_image_preserved():
         mock_agent.assert_called_once_with("What's new?", user="Ruben", channel="whatsapp")
         mock_send.assert_called_once_with("31612345678", "Nothing new today.")
 
+
+# ---------------------------------------------------------------------------
+# Phase 21: Atomic last-active UPDATE tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_last_active_update_atomic():
+    """process_incoming_whatsapp wraps last-active UPDATEs in conn.transaction()."""
+    from unittest.mock import AsyncMock, patch, MagicMock
+    from app.channels.whatsapp import process_incoming_whatsapp
+    from app import identity
+
+    payload = {
+        "entry": [{
+            "changes": [{
+                "value": {
+                    "messages": [{
+                        "from": "31612345678",
+                        "text": {"body": "Hello"}
+                    }]
+                }
+            }]
+        }]
+    }
+
+    mock_conn = AsyncMock()
+    # transaction() returns an async context manager
+    mock_conn.transaction.return_value = AsyncMock()
+    mock_conn.transaction.return_value.__aenter__.return_value = None
+
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    with patch("app.channels.whatsapp.send_whatsapp_message", new_callable=AsyncMock), \
+         patch("app.channels.whatsapp.run_agent", new_callable=AsyncMock) as mock_agent, \
+         patch("app.identity.user_from_whatsapp", new_callable=AsyncMock) as mock_resolve, \
+         patch("app.channels.whatsapp.get_pool", return_value=mock_pool):
+        mock_resolve.return_value = identity.User(name="Ruben")
+        mock_agent.return_value = "Hello!"
+        await process_incoming_whatsapp(payload)
+
+    # Verify transaction() context manager was used
+    mock_conn.transaction.assert_called_once()
+
