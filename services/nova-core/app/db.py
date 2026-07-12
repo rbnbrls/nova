@@ -56,6 +56,12 @@ def _run_alembic_upgrade():
 async def run_migrations():
     pool = await get_pool()
     async with pool.acquire() as conn:
+        tables = await conn.fetch(
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+        )
+        import logging
+        logging.getLogger("nova-core").warning(f"Existing tables in DB: {[t['tablename'] for t in tables]}")
+
         has_users = await conn.fetchval(
             "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users')"
         )
