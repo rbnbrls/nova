@@ -212,3 +212,56 @@ class TestProcessIncomingTelegram:
         with patch("app.channels.telegram._send_to_chat_id", new_callable=AsyncMock) as mock_send:
             await process_incoming_telegram({"update_id": 1, "message": {"chat": {"id": 123}}})
             mock_send.assert_not_called()
+
+
+class TestTelegramCommands:
+    """Tests for Telegram command handling (_handle_telegram_command)."""
+
+    def test_help_command_returns_capabilities(self):
+        from app.main import _handle_telegram_command
+        result = _handle_telegram_command("/help")
+        assert "Nova" in result
+        assert "Tasks" in result or "tasks" in result
+        assert "Calendar" in result or "calendar" in result
+        assert "help" in result.lower()
+
+    def test_tasks_command_returns_placeholder(self):
+        from app.main import _handle_telegram_command
+        result = _handle_telegram_command("/tasks")
+        assert "coming soon" in result.lower() or "Try asking" in result
+
+    def test_settings_command_returns_placeholder(self):
+        from app.main import _handle_telegram_command
+        result = _handle_telegram_command("/settings")
+        assert "coming soon" in result.lower() or "dashboard" in result.lower()
+
+    def test_unknown_command_returns_error(self):
+        from app.main import _handle_telegram_command
+        result = _handle_telegram_command("/unknown")
+        assert "Unknown" in result
+        assert "/help" in result
+
+
+class TestTelegramWebhookDedup:
+    """Tests for Telegram webhook deduplication logic."""
+
+    def test_duplicate_update_id_returns_accepted(self):
+        from app.main import db_get_pool
+        mock_conn = AsyncMock()
+        mock_conn.execute.return_value = "INSERT 0 0"
+        mock_pool = MagicMock()
+        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+        with patch("app.config.settings.telegram_enabled", True), \
+             patch("app.config.settings.telegram_webhook_secret", "secret"), \
+             patch("app.main.db_get_pool", return_value=mock_pool):
+            from fastapi.testclient import TestClient
+            from app.main import app as main_app
+            client2 = TestClient(main_app)
+            resp = client2.post(
+                "/webhooks/telegram",
+                json=_make_telegram_update(update_id=999),
+                headers={"X-Telegram-Bot-Api-Secret-Token": "secret"}
+            )
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "accepted"}
