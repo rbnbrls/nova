@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
-status: Milestone complete
-last_updated: "2026-07-12T16:50:00Z"
+status: Ready to plan
+last_updated: "2026-07-12T14:42:21Z"
 progress:
   total_phases: 37
-  completed_phases: 19
-  total_plans: 25
+  completed_phases: 21
+  total_plans: 26
   completed_plans: 24
-  percent: 51
+  percent: 57
 stopped_at: null
 current_phase: 36
 current_phase_name: Phase 36 — Write-Action Audit Trail
@@ -106,7 +106,7 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 
 ### Executed Plans
 
-| Plan | Summary |
+| Plan | Not started |
 |------|---------|
 | 30-01 | Voice room defaults DB table, Alembic migration, seed logic, RoomSessionManager with TTL |
 | 30-02 | Room-aware /v1/chat/completions endpoint, whoami intent, room-based user resolution, tests |
@@ -114,6 +114,7 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 | 29-01 | ForgejoClient, maintenance subpackage stubs, config, Docker mounts, scheduler wiring |
 | 29-02 | Nightly dependency scanner (pip + pip-audit) and log-anomaly reviewer (OpenObserve) |
 | 29-03 | Nightly backup verification (scratch Docker container) and weekly trend reporter (disk/VRAM/GPU/Postgres) |
+| 18-01 | Auth ordering and error consistency tests for nova-core and ops-bridge |
 
 ### Decisions Made
 
@@ -141,6 +142,10 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 - Presence checking via person entities in HA
 - Service-calling tools through Phase 8 confirmation gate
 
+- All nova-core auth failure modes return identical `{"detail": "Unauthorized"}` — consistency test proves no attacker-informative differences (18-01)
+- Auth ordering test at main.py:141-145 uses AsyncMock to detect run_agent calls — guards against future reordering (18-01)
+- ops-bridge app.py:70 uses hmac.compare_digest (constant-time) — existing test proves it (18-01)
+
 ### Last session
 
 **Started:** 2026-07-12T13:57:30Z
@@ -151,9 +156,9 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 ### This session
 
 **Started:** 2026-07-12T16:20:00Z
-**Completed:** 2026-07-12T16:50:00Z
-**Plans executed:** 2 (30-01, 30-02)
-**Commits:** 603997f, fbb7352, bef8358, ac2ba91
+**Completed:** 2026-07-12T14:42:00Z
+**Plans executed:** 3 (30-01, 30-02, 18-01)
+**Commits:** 603997f, fbb7352, bef8358, ac2ba91, 1e01acf, 1514796
 
 ## Operator Next Steps
 

@@ -14,8 +14,9 @@ import zoneinfo
 from . import llm, tools
 from .audit import record_tool_call
 from .config import settings
+from .db import get_user_memories
 
-_MAX_MUTATING_TOOLS = {"add_task", "complete_task", "create_event", "ha_call_service"}
+_MAX_MUTATING_TOOLS = {"add_task", "complete_task", "create_event", "ha_call_service", "remember", "forget"}
 MAX_HISTORY_MESSAGES = 20
 
 _CONFIRM_WORDS = {"yes", "confirm", "ok", "okay", "yep", "ja", "sure", "approve"}
@@ -70,6 +71,13 @@ def _summarize_action(name: str, args: dict, result: str = "") -> str:
         service_name = args.get("service", "")
         target = args.get("target", "")
         return f"Called HA service {domain}.{service_name} on {target}"
+    elif name == "remember":
+        content = args.get("content", "")
+        short = content[:60] + "..." if len(content) > 60 else content
+        return f"Remembered: {short}"
+    elif name == "forget":
+        pattern = args.get("content_pattern", "")
+        return f"Forget memory matching '{pattern}'"
     else:
         return f"'{name}' with {json.dumps(args)}"
 
@@ -81,7 +89,13 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
     """
     tz = zoneinfo.ZoneInfo(settings.nova_timezone)
     now_str = datetime.now(tz).isoformat()
-    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT.format(user=user, now=now_str)}]
+
+    system_content = SYSTEM_PROMPT.format(user=user, now=now_str)
+    memories_context = await get_user_memories(user)
+    if memories_context:
+        system_content += f"\n\nRelevant memories about {user} and the household:\n{memories_context}"
+
+    messages: list[dict] = [{"role": "system", "content": system_content}]
 
     if history:
         messages.extend(_truncate_history(history))
@@ -92,10 +106,10 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
     try:
         async with asyncio.timeout(settings.nova_max_turn_timeout):
             for _ in range(settings.nova_max_iterations):
-                message = await llm.chat(messages, tools=specs)
-                messages.append(message)
+                result = await llm.chat(messages, tools=specs)
+                messages.append(result.message)
 
-                tool_calls = message.get("tool_calls")
+                tool_calls = result.message.get("tool_calls")
                 if not tool_calls:
                     return (message.get("content") or "").strip()
 
@@ -108,7 +122,7 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
                         args = json.loads(args or "{}")
 
                     # CONFIRM-01: Intercept destructive or write action tools for confirmation
-                    if fn_name in ("create_event", "complete_task", "ha_call_service"):
+                    if fn_name in ("create_event", "complete_task", "ha_call_service", "forget"):
                         confirmed = False
                         if history:
                             # Find the last assistant message requesting confirmation
@@ -129,8 +143,8 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
                                 status="denied",
                                 confirmation_required=True,
                             )
-                            title_info = args.get("title") or ""
-                            return f"[CONFIRMATION_REQUIRED] Would you like me to proceed with {fn_name} for '{title_info}'?"
+                            detail = args.get("title") or args.get("content_pattern") or ""
+                            return f"[CONFIRMATION_REQUIRED] Would you like me to proceed with {fn_name} for '{detail}'?"
 
                     result = await tools.call_tool(fn["name"], args, user=user)
 
@@ -141,7 +155,7 @@ async def run_agent(user_message: str, *, user: str, history: list[dict] | None 
                             tool_name=fn["name"],
                             action_summary=_summarize_action(fn["name"], args, result),
                             status="completed",
-                            confirmation_required=(fn["name"] in ("create_event", "complete_task")),
+                            confirmation_required=(fn["name"] in ("create_event", "complete_task", "forget")),
                         )
                     messages.append({"role": "tool", "content": result})
     except TimeoutError:

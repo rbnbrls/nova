@@ -5,7 +5,7 @@ from datetime import datetime, time, timezone, timedelta
 import zoneinfo
 
 from .config import settings
-from .db import get_pool
+from .db import get_pool, get_user_memories
 from . import maintenance
 from .channels.whatsapp import send_whatsapp_message
 from .channels.dispatcher import send_to_user
@@ -75,6 +75,12 @@ async def send_morning_briefing_for_user(user_name: str):
     else:
         briefing += "- No new important emails.\n"
         
+    # Per D-04: Include per-user memories (private + household)
+    user_memories = await get_user_memories(user_name)
+    if user_memories:
+        briefing += "\n*Nova remembers:*\n"
+        briefing += user_memories + "\n"
+        
     await send_to_user(user_name, briefing, proactive=True)
 
 
@@ -139,6 +145,12 @@ async def send_weekly_briefing_for_user(user_name: str):
             briefing += f"- From: {mail['from']}\n  Subject: {mail['subject']}\n"
     else:
         briefing += "- No new important emails.\n"
+        
+    # Per D-04: Include per-user memories (private + household)
+    user_memories = await get_user_memories(user_name)
+    if user_memories:
+        briefing += "\n*Nova remembers:*\n"
+        briefing += user_memories + "\n"
         
     await send_to_user(user_name, briefing, proactive=True)
 
@@ -258,7 +270,7 @@ async def check_new_emails():
 
 async def process_queued_notifications():
     """Runs every minute to flush queued notifications for users whose DND window has ended."""
-    from .db import get_pool
+from .db import get_pool, get_user_memories
     from .identity import is_user_in_dnd
     
     pool = await get_pool()

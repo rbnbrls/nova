@@ -26,6 +26,27 @@ async def close_pool():
         _pool = None
 
 
+async def get_user_memories(user_name: str) -> str:
+    """Return formatted memories for a user: their private + all household-scope memories."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user_id = await conn.fetchval("SELECT id FROM users WHERE name = $1", user_name)
+        if not user_id:
+            return ""
+        rows = await conn.fetch(
+            """
+            SELECT content, scope FROM memories
+            WHERE (user_id = $1 AND scope = 'private') OR scope = 'household'
+            ORDER BY created_at DESC LIMIT 20
+            """,
+            user_id
+        )
+    if not rows:
+        return ""
+    lines = [f"- {r['content']} [{r['scope']}]" for r in rows]
+    return "\n".join(lines)
+
+
 def _run_alembic_upgrade():
     _dir = os.path.dirname(os.path.abspath(__file__))
     alembic_cfg = Config(os.path.join(_dir, "..", "alembic.ini"))
