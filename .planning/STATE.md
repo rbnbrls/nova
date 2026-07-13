@@ -278,6 +278,13 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Last session:** 2026-07-12T19:50:58.286Z
 **Stopped at:** Completed 39-01-PLAN.md
 **Resume file:** None
+**Last activity:** 2026-07-13 - Completed quick task 260713-otb: add a voice input button the user can click and hold to send voice messages to nova in the Ask Nova box
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260713-otb | add a voice input button the user can click and hold to send voice messages to nova in the Ask Nova box | 2026-07-13 | 65091f3 | [260713-otb-add-a-voice-input-button-the-user-can-cl](./quick/260713-otb-add-a-voice-input-button-the-user-can-cl/) |
 
 ## Performance Metrics
 
