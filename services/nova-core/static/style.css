@@ -943,6 +943,40 @@ body {
     display: none;
 }
 
+/* Voice input mic button (quick task) */
+.chat-input-row .btn-mic {
+    width: 2.6rem;
+    height: 2.6rem;
+    padding: 0;
+    font-size: 1.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background-color 0.15s, transform 0.1s;
+}
+
+.chat-input-row .btn-mic:hover:not(:disabled) {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: var(--border-hover);
+}
+
+.chat-input-row .btn-mic:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.chat-input-row .btn-mic.recording {
+    background: var(--warning-color);
+    border-color: var(--warning-color);
+    color: #fff;
+    animation: pulse 1s ease-in-out infinite;
+}
+
 /* Scrollbar for chat reply area */
 .chat-reply-area::-webkit-scrollbar {
     width: 4px;

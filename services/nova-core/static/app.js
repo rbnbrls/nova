@@ -846,6 +846,109 @@ function clearChatError() {
     if (el) el.classList.add('hidden');
 }
 
+// --- Voice Input (quick task) ---
+// Press-and-hold mic button using the browser Web Speech API. Transcript flows
+// into the existing #chat-input / handleChatSubmit() path — no backend changes.
+(function initVoiceInput() {
+    const btnMic = document.getElementById('chat-btn-mic');
+    const chatInput = document.getElementById('chat-input');
+    const chatBtnSend = document.getElementById('chat-btn-send');
+    if (!btnMic || !chatInput || !chatBtnSend) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    // Graceful degradation: leave the mic button disabled on unsupported browsers
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    let voiceInFlight = false;      // recognition currently active
+    let didTranscribe = false;       // a final transcript was captured this press
+
+    function resetRecordingUI() {
+        btnMic.classList.remove('recording');
+        voiceInFlight = false;
+        // Re-enable inputs unless an existing chat submission is in flight
+        if (!chatInFlight) {
+            chatInput.disabled = false;
+            chatBtnSend.disabled = false;
+        }
+    }
+
+    // --- Recognition lifecycle handlers ---
+    recognition.onresult = function (event) {
+        const last = event.results[event.results.length - 1];
+        if (last && last[0] && last[0].transcript) {
+            const transcript = String(last[0].transcript).trim();
+            if (transcript) {
+                chatInput.value = transcript;
+                didTranscribe = true;
+            }
+        }
+    };
+
+    recognition.onerror = function (event) {
+        console.warn('Speech recognition error:', (event && event.error) || event);
+        resetRecordingUI();
+        showChatError('Voice input failed. Try again or type your message.');
+    };
+
+    recognition.onend = function () {
+        resetRecordingUI();
+    };
+
+    // --- Press-and-hold handlers (mouse + touch + pointer) ---
+    function startHold(e) {
+        e.preventDefault();
+        if (chatInFlight || voiceInFlight) return;
+        voiceInFlight = true;
+        didTranscribe = false;
+        btnMic.classList.add('recording');
+        chatInput.disabled = true;
+        chatBtnSend.disabled = true;
+        clearChatError();
+        try {
+            recognition.start();
+        } catch (err) {
+            // recognition may throw if started twice in quick succession
+            console.warn('recognition.start() threw:', err);
+            resetRecordingUI();
+        }
+    }
+
+    function endHold(e) {
+        if (!voiceInFlight) return;
+        if (e) e.preventDefault();
+        try {
+            recognition.stop();
+        } catch (err) {
+            console.warn('recognition.stop() threw:', err);
+        }
+        // Capture the transcript locally before reset (recognition.onend will reset UI)
+        const transcript = chatInput.value.trim();
+        resetRecordingUI();
+        if (didTranscribe || transcript) {
+            // Submit through existing /dashboard/chat path
+            handleChatSubmit();
+        }
+    }
+
+    btnMic.addEventListener('mousedown', startHold);
+    btnMic.addEventListener('touchstart', startHold, { passive: false });
+    btnMic.addEventListener('pointerdown', startHold);
+
+    btnMic.addEventListener('mouseup', endHold);
+    btnMic.addEventListener('mouseleave', endHold);
+    btnMic.addEventListener('touchend', endHold);
+    btnMic.addEventListener('pointerup', endHold);
+    btnMic.addEventListener('pointercancel', endHold);
+
+    // Enable the mic button only on supported browsers
+    btnMic.disabled = false;
+})();
+
 // --- Settings Modal (cog icon) ---
 const settingsModal = document.getElementById('settings-modal');
 const settingsCog = document.getElementById('btn-settings-cog');
