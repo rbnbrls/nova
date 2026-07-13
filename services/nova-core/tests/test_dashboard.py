@@ -130,3 +130,12 @@ def test_dashboard_html_has_chat_panel(client):
     resp = client.get("/static/index.html")
     assert resp.status_code == 200
     assert b'class="dashboard-card glass-panel chat-panel"' in resp.content or b'id="chat-panel"' in resp.content
+
+
+def test_dashboard_html_has_mic_button(client):
+    """The chat panel includes a voice input mic button with id chat-btn-mic."""
+    resp = client.get("/static/index.html")
+    assert resp.status_code == 200
+    assert b'id="chat-btn-mic"' in resp.content
+    # Sanity: chat panel still present
+    assert b'id="chat-panel"' in resp.content
