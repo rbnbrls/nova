@@ -7,16 +7,11 @@
 nova.local {
 	tls internal
 
-	# Static household dashboard (Phase 8)
-	handle_path /dashboard/* {
-		root * /srv/dashboard
-		file_server
-	}
-
-	# Nova Core API (chat endpoint used by Home Assistant + dashboard data)
-	handle {
-		reverse_proxy nova-core:8080
-	}
+	# All paths reverse-proxy to Nova Core — it serves both the static
+	# dashboard (mounted at /dashboard) and the chat/admin/api endpoints.
+	# (The dashboard files live in nova-core's /app/static, not in this
+	# Caddy container, so the file_server approach was broken.)
+	reverse_proxy nova-core:8080
 }
 
 # The WhatsApp webhook is proxied here and published externally via Cloudflare Tunnel,
