@@ -991,4 +991,106 @@ body {
     border-radius: 2px;
 }
 
+/* Phase 40 — Admin panel styles (append-only block, do not modify above) */
+.admin-service-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+@media (max-width: 1200px) {
+    .admin-service-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 800px) {
+    .admin-service-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.admin-service-cell {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.admin-service-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.admin-service-status {
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.admin-service-status.ok {
+    color: var(--success-color);
+}
+
+.admin-service-status.down {
+    color: var(--warning-color);
+}
+
+.admin-service-detail {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.3;
+}
+
+.admin-service-cell[data-status="ok"] .pulse-dot {
+    background: var(--success-color);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.admin-service-cell[data-status="down"] .pulse-dot {
+    background: var(--warning-color);
+    animation: none;
+}
+
+.admin-channel-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.admin-channel-cell {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-left: 3px solid var(--accent-color);
+    border-radius: 12px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.admin-channel-cell.unlinked {
+    border-left-color: var(--text-secondary);
+}
+
+.admin-channel-status {
+    font-size: 0.95rem;
+}
+
+.admin-channel-status .status-value {
+    color: var(--text-secondary);
+}
+
+.admin-channel-cell.linked .admin-channel-status .status-value {
+    color: var(--success-color);
+}
+
+.chat-user-tabs {
+    display: flex;
+    gap: 0.75rem;
+}
+
 

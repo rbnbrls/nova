@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Admin</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Plus+Jakarta+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <div class="logo-area">
+                <h1>Nova <span>Admin</span></h1>
+                <div class="status-indicator">
+                    <span class="pulse-dot"></span>
+                    <span class="status-text">Live Connection</span>
+                </div>
+            </div>
+            <div class="time-area" id="live-clock">--:--:--
+                <a href="/" class="btn btn-secondary" id="back-to-dashboard">← Back to Dashboard</a>
+            </div>
+        </header>
+
+        <div class="chat-error hidden" id="admin-error-banner">Admin stream disconnected. Retrying…</div>
+
+        <main class="dashboard-grid">
+            <section class="dashboard-card glass-panel audit-panel" id="system-status-panel" style="grid-column: span 2;">
+                <div class="card-header">
+                    <h2>System Status</h2>
+                </div>
+                <div class="admin-service-grid">
+                    <div class="admin-service-cell" id="service-ollama" data-status="" aria-label="Ollama: Checking…">
+                        <div class="admin-service-name">Ollama</div>
+                        <span class="pulse-dot" aria-hidden="true"></span>
+                        <div class="admin-service-status">Checking Ollama…</div>
+                        <div class="admin-service-detail">—</div>
+                    </div>
+                    <div class="admin-service-cell" id="service-postgres" data-status="" aria-label="Postgres: Checking…">
+                        <div class="admin-service-name">Postgres</div>
+                        <span class="pulse-dot" aria-hidden="true"></span>
+                        <div class="admin-service-status">Checking Postgres…</div>
+                        <div class="admin-service-detail">—</div>
+                    </div>
+                    <div class="admin-service-cell" id="service-caldav" data-status="" aria-label="CalDAV: Checking…">
+                        <div class="admin-service-name">CalDAV</div>
+                        <span class="pulse-dot" aria-hidden="true"></span>
+                        <div class="admin-service-status">Checking CalDAV…</div>
+                        <div class="admin-service-detail">—</div>
+                    </div>
+                    <div class="admin-service-cell" id="service-ha" data-status="" aria-label="Home Assistant: Checking…">
+                        <div class="admin-service-name">Home Assistant</div>
+                        <span class="pulse-dot" aria-hidden="true"></span>
+                        <div class="admin-service-status">Checking HA…</div>
+                        <div class="admin-service-detail">—</div>
+                    </div>
+                    <div class="admin-service-cell" id="service-email" data-status="" aria-label="Email: Checking…">
+                        <div class="admin-service-name">Email (IMAP)</div>
+                        <span class="pulse-dot" aria-hidden="true"></span>
+                        <div class="admin-service-status">Checking Email…</div>
+                        <div class="admin-service-detail">—</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="dashboard-card glass-panel audit-panel" id="channel-status-panel" style="grid-column: span 2;">
+                <div class="card-header">
+                    <h2>Channel Status</h2>
+                </div>
+                <div class="chat-user-tabs">
+                    <button class="chat-user-tab active" data-user="Ruben">Ruben</button>
+                    <button class="chat-user-tab" data-user="Meral">Méral</button>
+                </div>
+                <div class="admin-channel-grid">
+                    <div class="admin-channel-cell" id="channel-ruben-whatsapp" data-user="Ruben" data-channel="whatsapp">
+                        <div class="admin-service-name">WhatsApp</div>
+                        <div class="admin-channel-status">Status: <span class="status-value">Checking…</span></div>
+                    </div>
+                    <div class="admin-channel-cell" id="channel-ruben-telegram" data-user="Ruben" data-channel="telegram">
+                        <div class="admin-service-name">Telegram</div>
+                        <div class="admin-channel-status">Status: <span class="status-value">Checking…</span></div>
+                    </div>
+                    <div class="admin-channel-cell" id="channel-meral-whatsapp" data-user="Meral" data-channel="whatsapp" hidden>
+                        <div class="admin-service-name">WhatsApp</div>
+                        <div class="admin-channel-status">Status: <span class="status-value">Checking…</span></div>
+                    </div>
+                    <div class="admin-channel-cell" id="channel-meral-telegram" data-user="Meral" data-channel="telegram" hidden>
+                        <div class="admin-service-name">Telegram</div>
+                        <div class="admin-channel-status">Status: <span class="status-value">Checking…</span></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/static/admin.js"></script>
+</body>
+</html>

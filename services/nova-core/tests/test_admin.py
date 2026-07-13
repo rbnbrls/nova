@@ -261,3 +261,37 @@ async def test_collect_channel_status():
     # Meral: nothing linked
     assert result["Meral"]["whatsapp"]["linked"] is False
     assert result["Meral"]["telegram"]["linked"] is False
+
+
+# ---------------------------------------------------------------------------
+# Frontend structure tests — Plan 02 (added when admin.html was created)
+# ---------------------------------------------------------------------------
+
+
+def test_admin_html_served(client):
+    """GET /static/admin.html returns 200."""
+    resp = client.get("/static/admin.html")
+    assert resp.status_code == 200
+
+
+def test_admin_html_structure(client):
+    """admin.html contains expected structural elements."""
+    resp = client.get("/static/admin.html")
+    content = resp.content
+    assert b'id="system-status-panel"' in content
+    assert b'id="channel-status-panel"' in content
+    assert b'id="service-ollama"' in content
+    assert b'id="service-postgres"' in content
+    assert b'id="service-caldav"' in content
+    assert b'id="service-ha"' in content
+    assert b'id="service-email"' in content
+    assert b'id="channel-ruben-whatsapp"' in content
+    assert b'id="channel-meral-whatsapp"' in content
+    assert b'href="/"' in content
+    assert b'src="/static/admin.js"' in content
+
+
+def test_admin_html_no_admin_link_on_dashboard(client):
+    """GET /static/index.html does not contain any /admin reference (D-07)."""
+    resp = client.get("/static/index.html")
+    assert b"/admin" not in resp.content
