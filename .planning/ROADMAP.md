@@ -60,13 +60,13 @@ Plans:
 **Goal:** Add a read-only admin status board at `/admin` (serving `/static/admin.html`) that mirrors the dashboard's glass-panel aesthetic and shows system health (Ollama, Postgres, CalDAV, HA, email IMAP) + per-user channel link status (WhatsApp/Telegram for Ruben and Méral), pushed via SSE every 45 seconds. No auth (LAN-only trust), no write actions, no discoverability from the dashboard.
 **Requirements**: TBD
 **Depends on:** Phase 39
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 
 **Wave 1**
 
-- [ ] 40-01-PLAN.md — Backend: `/admin` redirect + `/admin/stream` SSE endpoint with concurrent `_check_*` health checks + per-user channel status query (D-01, D-02, D-03, D-04, D-05, D-08, D-10) + TDD test_admin.py
+- [x] 40-01-PLAN.md — Backend: `/admin` redirect + `/admin/stream` SSE endpoint with concurrent `_check_*` health checks + per-user channel status query (D-01, D-02, D-03, D-04, D-05, D-08, D-10) + TDD test_admin.py
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

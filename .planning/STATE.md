@@ -4,14 +4,13 @@ milestone: v1
 milestone_name: Foundation & Core Features
 status: Milestone complete
 stopped_at: Phase 40 UI-SPEC approved
-last_updated: "2026-07-13T16:44:56.773Z"
+last_updated: "2026-07-13T17:40:25.752Z"
 last_activity: 2026-07-13
-last_activity_desc: "Completed quick task 260713-otb: add a voice input button the user can click and hold to send voice messages to nova in the Ask Nova box"
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
   percent: 67
 current_phase: 38
 current_phase_name: Phase 38 — Subdomain and Email
@@ -26,7 +25,7 @@ See: `.planning/ROADMAP.md` (reorganized 2026-07-12)
 
 **Core value:** A private, fully local household assistant that Ruben & Méral can reach by text or voice, keeping a shared plan (tasks, calendar, important email) — reasoning and data never leave the house.
 
-**Current focus:** Phase 39 — Dashboard Chat Box
+**Current focus:** Phase 40 — admin-panel-page
 
 ## Execution Order
 
@@ -281,7 +280,7 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 **Last session:** 2026-07-13T16:44:56.767Z
 **Stopped at:** Phase 40 UI-SPEC approved
 **Resume file:** .planning/phases/40-admin-panel-page/40-UI-SPEC.md
-**Last activity:** 2026-07-13 - Completed quick task 260713-otb: add a voice input button the user can click and hold to send voice messages to nova in the Ask Nova box
+**Last activity:** 2026-07-13
 
 ### Quick Tasks Completed
 
@@ -296,3 +295,4 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 | Phase 38-subdomain-and-email P01 | 8min | 3 tasks | 3 files |
 | Phase 38-subdomain-and-email P03 | 11min | 3 tasks | 3 files |
 | Phase 39-add-a-input-field-for-users-to-chat-with-nova-on-the-static- P01 | 5 min | 2 tasks | 6 files |
+| Phase 40-admin-panel-page P01 | 10min | 2 tasks | 2 files |
