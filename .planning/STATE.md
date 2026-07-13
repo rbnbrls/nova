@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Milestone complete
-stopped_at: Phase 40 context gathered
-last_updated: "2026-07-13T16:21:39.975Z"
+stopped_at: Phase 40 UI-SPEC approved
+last_updated: "2026-07-13T16:44:56.773Z"
 last_activity: 2026-07-13
 last_activity_desc: "Completed quick task 260713-otb: add a voice input button the user can click and hold to send voice messages to nova in the Ask Nova box"
 progress:
@@ -278,9 +278,9 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 
 ## Session
 
-**Last session:** 2026-07-13T16:21:39.968Z
-**Stopped at:** Phase 40 context gathered
-**Resume file:** .planning/phases/40-admin-panel-page/40-CONTEXT.md
+**Last session:** 2026-07-13T16:44:56.767Z
+**Stopped at:** Phase 40 UI-SPEC approved
+**Resume file:** .planning/phases/40-admin-panel-page/40-UI-SPEC.md
 **Last activity:** 2026-07-13 - Completed quick task 260713-otb: add a voice input button the user can click and hold to send voice messages to nova in the Ask Nova box
 
 ### Quick Tasks Completed
