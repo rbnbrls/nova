@@ -605,22 +605,25 @@ def test_dashboard_redirect(client):
 
 **No [ASSUMED] claims from training data** — all claims above are derived from reading the actual codebase during this research session. The only external knowledge used is the FastAPI/MDN/Python docs which are tagged `[CITED: ...]`.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the admin SSE endpoint expose a `/admin/status` JSON snapshot endpoint too?**
    - What we know: D-10 locks SSE. UI-SPEC §SSE/Refresh locks `EventSource('/admin/stream')`.
    - What's unclear: A non-SSE `/admin/status` GET endpoint could be useful for `curl` debugging (e.g. `curl nova.local/admin/status | jq`), but it's not required by any decision.
    - Recommendation: Skip for Phase 40 — out of scope unless D-10 is reinterpreted. If the planner wants it, add as an optional task. The `_collect_admin_status()` helper is reusable for both SSE and a hypothetical snapshot endpoint with no extra work.
+   - **RESOLVED: Skipped — out of scope per D-10 (SSE-only). No task adds a snapshot endpoint.**
 
 2. **Should the admin page show a "checked_at" timestamp?**
    - What we know: UI-SPEC §Copywriting does not mention a timestamp. UI-SPEC §SSE/Refresh mentions only `placeholder-loader` text for the initial loading state.
    - What's unclear: A small "Last checked: 14:32:05" line could increase trust in the page.
    - Recommendation: Add a `checked_at` ISO timestamp field to the SSE payload (cheap — `datetime.now(timezone.utc).isoformat()`); `admin.js` can render it in the page header next to the `Live Connection` indicator. If the planner disagrees, it's a one-line removal.
+   - **RESOLVED: Rejected — planner chose `{services, channels}`-only payload; no `checked_at` field. UI-SPEC §Copywriting has no checked_at field; the `Live Connection` pulse-dot indicator serves the same trust purpose without a timestamp. Rationale recorded to avoid re-litigation.**
 
 3. **Should the channel status identifier for Telegram show the chat_id?**
    - What we know: UI-SPEC §Copywriting says identifiers are masked per privacy scope, and the WhatsApp mask is `+31 6 12 … 8`.
    - What's unclear: Telegram chat_ids are numeric (e.g. `1234567890`) — masking doesn't make sense the same way.
    - Recommendation: For Telegram, show just `Linked` (no identifier) — the chat_id is not user-meaningful. WhatsApp shows the masked number. This matches the existing settings modal behavior (`app.js:233` shows `+{number}` for WhatsApp, `Linked` / `Not Linked` text for Telegram at `app.js:239`).
+   - **RESOLVED: Telegram shows `Linked` only (chat_id is not user-meaningful); WhatsApp shows masked number per UI-SPEC §Copywriting. Plan 01 test asserts empty identifier for Telegram when linked.**
 
 ## Environment Availability
 
