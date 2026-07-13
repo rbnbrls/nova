@@ -17,7 +17,9 @@
                     <span class="status-text">Live Connection</span>
                 </div>
             </div>
-            <div class="time-area" id="live-clock">--:--:--</div>
+            <div class="time-area" id="live-clock">--:--:--
+                <button class="settings-cog-btn" id="btn-settings-cog" title="Identity & Settings">⚙</button>
+            </div>
         </header>
 
         <main class="dashboard-grid">
@@ -43,10 +45,14 @@
                 </div>
             </section>
 
-            <!-- Bottom Preferences & Identity linking -->
-            <section class="dashboard-card glass-panel settings-panel" id="preferences-panel">
-                <div class="card-header">
-                    <h2>Identity & Settings</h2>
+            <!-- Preferences & Identity linking was here — moved to settings modal below -->
+        </main>
+
+        <!-- Settings Modal (opened via cog icon) -->
+        <div id="settings-modal" class="modal-overlay hidden">
+            <div class="modal-content settings-modal-content">
+                <div class="modal-header">
+                    <h3>Identity & Settings</h3>
                 </div>
                 <div class="settings-content">
                     <div class="settings-user-selector">
@@ -131,9 +137,12 @@
                         </div>
                     </div>
                     <div class="settings-message" id="settings-msg"></div>
+                    <div class="modal-actions">
+                        <button class="btn btn-secondary" id="btn-settings-close">Close</button>
+                    </div>
                 </div>
-            </section>
-        </main>
+            </div>
+        </div>
 
         <!-- Chat: Phase 39 — Dashboard Chat Box -->
         <section class="dashboard-card glass-panel chat-panel" id="chat-panel">

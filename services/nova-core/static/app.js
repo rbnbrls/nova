@@ -846,4 +846,39 @@ function clearChatError() {
     if (el) el.classList.add('hidden');
 }
 
+// --- Settings Modal (cog icon) ---
+const settingsModal = document.getElementById('settings-modal');
+const settingsCog = document.getElementById('btn-settings-cog');
+const settingsClose = document.getElementById('btn-settings-close');
+
+function showSettingsModal() {
+    if (settingsModal) {
+        settingsModal.classList.remove('hidden');
+        fetchPreferences();  // Refresh data when opening
+    }
+}
+
+function hideSettingsModal() {
+    if (settingsModal) {
+        settingsModal.classList.add('hidden');
+    }
+}
+
+if (settingsCog) {
+    settingsCog.addEventListener('click', showSettingsModal);
+}
+
+if (settingsClose) {
+    settingsClose.addEventListener('click', hideSettingsModal);
+}
+
+// Click overlay background to close
+if (settingsModal) {
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) {
+            hideSettingsModal();
+        }
+    });
+}
+
 
