@@ -31,7 +31,7 @@ CURL_OPTS=(-fsS)
 [[ "${PROXMOX_API_INSECURE:-true}" == "true" ]] && CURL_OPTS+=(-k)
 AUTH_HEADER="Authorization: PVEAPIToken=${PROXMOX_API_TOKEN_ID}=${PROXMOX_API_TOKEN_SECRET}"
 
-papi() { curl "${CURL_OPTS[@]}" -H "$AUTH_HEADER" "$PROXMOX_API_URL$1"; }
+papi() { curl "${CURL_OPTS[@]}" -H "$AUTH_HEADER" "$PROXMOX_API_URL$1" | jq '.data // .'; }
 
 echo "═══ Node status ═══"
 papi "/nodes/$PROXMOX_NODE/status" \

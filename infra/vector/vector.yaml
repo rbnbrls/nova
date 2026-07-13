@@ -21,7 +21,11 @@ sinks:
   openobserve_logs:
     type: http
     inputs: [docker_enriched]
-    uri: "${OPENOBSERVE_URL}/api/${OPENOBSERVE_ORG}/docker/_json"
+    # OPENOBSERVE_URL may be set with or without an http(s):// scheme (Coolify
+    # auto-generates it with the scheme; a hand-rolled .env may omit it).
+    # OPENOBSERVE_HOST is always bare. We build the URI from the host and force
+    # http:// to avoid Vector's scheme-relative parsing doubling the prefix.
+    uri: "http://${OPENOBSERVE_HOST}/api/${OPENOBSERVE_ORG}/docker/_json"
     method: post
     # OpenObserve is reached over LAN via Coolify's Traefik with a self-signed cert.
     tls:
@@ -40,7 +44,7 @@ sinks:
   openobserve_metrics:
     type: prometheus_remote_write
     inputs: [host]
-    endpoint: "${OPENOBSERVE_URL}/api/${OPENOBSERVE_ORG}/prometheus/api/v1/write"
+    endpoint: "http://${OPENOBSERVE_HOST}/api/${OPENOBSERVE_ORG}/prometheus/api/v1/write"
     tls:
       verify_certificate: false
     auth:

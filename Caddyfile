@@ -2,8 +2,11 @@
 # - The WhatsApp webhook is the only route exposed publicly (via Cloudflare Tunnel → Phase 4).
 # - The dashboard (Phase 8) and API are LAN-only.
 
-# LAN entry point (replace with your local hostname/IP).
+# LAN entry point. `nova.local` is unreachable on the public internet, so we
+# use Caddy's `internal` CA to issue a self-signed cert instead of ACME.
 nova.local {
+	tls internal
+
 	# Static household dashboard (Phase 8)
 	handle_path /dashboard/* {
 		root * /srv/dashboard
