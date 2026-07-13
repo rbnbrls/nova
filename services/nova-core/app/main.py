@@ -5,6 +5,8 @@ Exposes:
   POST /v1/chat/completions        OpenAI-compatible agent endpoint (all channels)
   GET  /dashboard/tasks            read-only feed for the Phase 8 dashboard (stub)
   GET  /dashboard/events           read-only feed for the Phase 8 dashboard (stub)
+  GET  /admin                      redirect to static admin page (D-05)
+  GET  /admin/stream               unauthenticated SSE health feed (D-08, D-10)
 
 Channel webhooks (WhatsApp, Phase 4) will be added under /webhooks/*.
 """
@@ -18,6 +20,7 @@ import os
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 import zoneinfo
 
 from fastapi import FastAPI, Request, Query, BackgroundTasks, Response, HTTPException
@@ -34,6 +37,8 @@ from .channels.telegram import process_incoming_telegram, _handle_telegram_comma
 from .channels.webhook_router import register_all_webhooks
 from .db import get_pool as db_get_pool
 from .tools.calendar import _get_calendar
+from .tools.email import _get_imap_connection
+from .tools.home_assistant import _ha_get
 from .voice_rooms import RoomSessionManager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -305,6 +310,252 @@ async def dashboard_stream():
             await asyncio.sleep(15)
             
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Admin status board — Phase 40 / Plan 01 (read-only, no auth per D-08)
+# ---------------------------------------------------------------------------
+
+
+def _host_only(url: str) -> str:
+    """Return only ``host:port`` of a URL — never scheme, user, pass, or path.
+
+    D-05 (privacy scope): admin payload ``host`` fields must never carry
+    credentials.  ``urlparse().netloc`` still includes ``user:pass@`` so we
+    rebuild from ``.hostname``/``.port``.  Schemeless inputs (e.g.
+    ``"host:5432"``) leave the whole string in ``path`` with no netloc —
+    we return the raw input in that case.
+    """
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    if parsed.hostname:
+        if parsed.port:
+            return f"{parsed.hostname}:{parsed.port}"
+        return parsed.hostname
+    # No scheme: urlparse put the whole thing in `path`.  Return as-is.
+    return url
+
+
+def _mask_identifier(number: str) -> str:
+    """Mask a phone number-ish identifier as `+XX X XX … X` (D-03 privacy).
+
+    Short values (<=7 digits after the leading +) are returned as-is —
+    they cannot meaningfully identify a person.  The head is grouped as
+    [2, 1, 3] digits so a Dutch mobile number reads `+31 6 12X … X`,
+    matching the spacing already used by the dashboard preferences view
+    (app.js).  The full identifier is replaced by its last digit.
+    """
+    if not number:
+        return ""
+    n = number.lstrip("+")
+    if len(n) <= 7:
+        return f"+{n}"
+    head = f"{n[0:2]} {n[2:3]} {n[3:6]}"
+    return f"+{head} … {n[-1]}"
+
+
+async def _check_ollama() -> dict:
+    """Ollama health check — reuses llm.is_ready()."""
+    host = _host_only(settings.ollama_base_url)
+    try:
+        ready = await llm.is_ready()
+        if ready:
+            return {"status": "ok", "detail": f"Model: {settings.nova_model}", "host": host}
+        return {"status": "down", "detail": f"Ollama not responding at {host}", "host": host}
+    except Exception as exc:
+        log.warning("admin _check_ollama failed: %s", exc)
+        return {"status": "down", "detail": f"Ollama not responding at {host}", "host": host}
+
+
+async def _check_postgres() -> dict:
+    """Postgres health check — reuses db.get_pool()."""
+    host = f"{settings.postgres_host}:{settings.postgres_port}"
+    try:
+        pool = await db.get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("SELECT 1")
+            table_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'"
+            )
+        return {"status": "ok", "detail": f"{table_count} tables reachable", "host": host}
+    except Exception as exc:
+        log.warning("admin _check_postgres failed: %s", exc)
+        return {"status": "down", "detail": f"Cannot acquire pool at {host}", "host": host}
+
+
+async def _check_caldav() -> dict:
+    """CalDAV health check — reuses sync _get_calendar() wrapped in try/except."""
+    host = _host_only(settings.caldav_url)
+    try:
+        _get_calendar()
+        return {"status": "ok", "detail": "Calendar URL reachable", "host": host}
+    except Exception as exc:
+        log.warning("admin _check_caldav failed: %s", exc)
+        return {"status": "down", "detail": f"Check CalDAV server at {host}", "host": host}
+
+
+async def _check_ha() -> dict:
+    """Home Assistant health check — reuses async _ha_get('/').
+
+    Distinguishes "not configured" (empty token/url) from "configured but
+    unreachable" by inspecting the error payload returned by _ha_get.
+    """
+    host = _host_only(settings.nova_ha_url)
+    try:
+        result = await _ha_get("/")
+        if isinstance(result, dict) and "error" in result:
+            err = str(result.get("error", ""))
+            if "not configured" in err.lower():
+                return {"status": "down", "detail": "HA not configured", "host": host}
+            return {"status": "down", "detail": f"Check HA at {host}", "host": host}
+        return {"status": "ok", "detail": "HA reachable", "host": host}
+    except Exception as exc:
+        log.warning("admin _check_ha failed: %s", exc)
+        return {"status": "down", "detail": f"Check HA at {host}", "host": host}
+
+
+async def _check_imap() -> dict:
+    """IMAP health check — reuses async _get_imap_connection().
+
+    None return means "not configured" (empty nova_imap_host).  Otherwise
+    the connection already succeeded (login happened inside the helper);
+    we close it defensively before returning.
+    """
+    host = _host_only(settings.nova_imap_host)
+    conn = None
+    try:
+        conn = await _get_imap_connection()
+        if conn is None:
+            return {"status": "down", "detail": "Not configured", "host": ""}
+        # The user identifier is an email address — not a secret.  Mask to
+        # `user@host` for consistency with the dashboard preferences view.
+        user = settings.nova_imap_user or ""
+        if "@" in user:
+            user = user.split("@", 1)[0] + "@…"
+        return {"status": "ok", "detail": user or "IMAP reachable", "host": host}
+    except Exception as exc:
+        log.warning("admin _check_imap failed: %s", exc)
+        return {"status": "down", "detail": f"IMAP login failed at {host}", "host": host}
+    finally:
+        if conn is not None:
+            try:
+                # aioimaplib IMAP4_SSL — logout is the documented teardown.
+                await conn.logout()
+            except Exception:
+                # Cleanup must never raise into the response path.
+                pass
+
+
+async def _collect_admin_status() -> dict:
+    """Run all 5 service checks concurrently + the channel-link query.
+
+    Uses asyncio.gather(return_exceptions=True) so one failing check does
+    not abort the others (D-02 isolation).  Each check is capped at 5s via
+    asyncio.wait_for so a hung backend adds ≈5s to the cycle rather than
+    blocking the SSE generator indefinitely (T-40-06).
+    """
+    checks = [
+        asyncio.wait_for(_check_ollama(), timeout=5),
+        asyncio.wait_for(_check_postgres(), timeout=5),
+        asyncio.wait_for(_check_caldav(), timeout=5),
+        asyncio.wait_for(_check_ha(), timeout=5),
+        asyncio.wait_for(_check_imap(), timeout=5),
+    ]
+    results = await asyncio.gather(*checks, return_exceptions=True)
+
+    keys = ("ollama", "postgres", "caldav", "ha", "email")
+    services: dict[str, dict] = {}
+    for key, result in zip(keys, results):
+        if isinstance(result, Exception):
+            # Defensive belt-and-suspenders: the _check_* helpers already
+            # catch their own exceptions and return a dict, so the branch
+            # should be unreachable.  Log server-side, never push str(e).
+            log.warning("admin %s check raised: %s", key, result)
+            services[key] = {"status": "down", "detail": f"{key} check failed", "host": ""}
+        else:
+            services[key] = result
+
+    channels = await _collect_channel_status()
+    return {"services": services, "channels": channels}
+
+
+async def _collect_channel_status() -> dict:
+    """Per-user per-channel link state for Ruben and Meral (D-03).
+
+    LEFT JOIN channel_identities on (user_id AND channel='telegram') so a
+    missing Telegram row does not drop the user.  WhatsApp state lives on
+    user_preferences.whatsapp_number (legacy column from Phase 13).
+    """
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT u.name,
+                   up.whatsapp_number,
+                   ci_t.channel_id AS telegram_chat_id,
+                   up.channels_enabled
+            FROM users u
+            LEFT JOIN user_preferences up ON u.id = up.user_id
+            LEFT JOIN channel_identities ci_t
+                   ON ci_t.user_id = u.id AND ci_t.channel = 'telegram'
+            WHERE u.name IN ('Ruben', 'Meral')
+            """
+        )
+    channels: dict[str, dict] = {}
+    for r in rows:
+        name = r["name"]
+        channels_enabled = r["channels_enabled"] or []
+        wa_linked = bool(r["whatsapp_number"])
+        tg_linked = bool(r["telegram_chat_id"]) or (
+            bool(channels_enabled) and "telegram" in channels_enabled
+        )
+        channels[name] = {
+            "whatsapp": {
+                "linked": wa_linked,
+                "identifier": _mask_identifier(r["whatsapp_number"] or ""),
+            },
+            "telegram": {
+                "linked": tg_linked,
+                "identifier": "Telegram" if r["telegram_chat_id"] else "",
+            },
+        }
+    return channels
+
+
+@app.get("/admin")
+async def admin_redirect():
+    """Redirect the bare /admin URL to the static admin page (D-05)."""
+    return RedirectResponse(url="/static/admin.html")
+
+
+@app.get("/admin/stream")
+async def admin_stream():
+    """Unauthenticated SSE stream of the admin status payload (D-08, D-10).
+
+    Emits a named `event: status` SSE event with a JSON payload of shape
+    `{"services": {...5 entries...}, "channels": {Ruben, Meral}}` every
+    45 seconds.  No auth challenge is enforced — LAN trust only (D-08).
+    """
+
+    async def event_generator():
+        while True:
+            try:
+                payload = await _collect_admin_status()
+                yield f"event: status\ndata: {json.dumps(payload)}\n\n"
+            except Exception as e:
+                # Lazy %s logging per CLAUDE.md §Logging.
+                log.warning("admin SSE generator error: %s", e)
+            # Sleep is OUTSIDE the try so cancellation (client disconnect)
+            # can interrupt the wait — required by FastAPI cancellation
+            # semantics (T-40-07).
+            await asyncio.sleep(45)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/dashboard/chat")
