@@ -43,7 +43,12 @@ def _get_calendar() -> caldav.Calendar:
     if _calendar_cache is not None:
         return _calendar_cache[1]
 
-    client = caldav.DAVClient(url=settings.caldav_url, timeout=_CALDAV_TIMEOUT)
+    client = caldav.DAVClient(
+        url=settings.caldav_url,
+        username=settings.caldav_username or None,
+        password=settings.caldav_password or None,
+        timeout=_CALDAV_TIMEOUT,
+    )
     principal = client.principal()
     calendars = principal.calendars()
     if not calendars:

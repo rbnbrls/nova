@@ -225,8 +225,7 @@ async def dashboard_tasks() -> dict:
 async def dashboard_events() -> dict:
     from datetime import datetime, timezone, timedelta
     import zoneinfo
-    from .tools.calendar import _get_calendar
-    
+
     tz = zoneinfo.ZoneInfo(settings.nova_timezone)
     now_local = datetime.now(tz)
     start_dt = datetime.combine(now_local.date(), datetime.min.time(), tzinfo=tz)
@@ -438,10 +437,15 @@ async def _check_caldav() -> dict:
     try:
         _get_calendar()
         return {"status": "ok", "detail": "Calendar URL reachable", "host": host}
+    except AuthorizationError:
+        log.warning("admin _check_caldav auth failed")
+        return {
+            "status": "down",
+            "detail": f"Check CalDAV server at {host} — Unauthorized — check CalDAV credentials or server auth config",
+            "host": host,
+        }
     except Exception as exc:
         log.warning("admin _check_caldav failed: %s", exc)
-        # Include a hint about the actual failure so the dashboard shows
-        # something more helpful than a generic "check server" message.
         hint = str(exc).split(":")[-1].strip()[:80] if str(exc) else ""
         detail = f"Check CalDAV server at {host}"
         if hint:

@@ -34,6 +34,8 @@ class Settings(BaseSettings):
 
     # Calendar (CalDAV)
     caldav_url: str = "http://radicale:5232/"
+    caldav_username: str = ""
+    caldav_password: str = ""
 
     # Home Assistant
     nova_ha_token: str = ""

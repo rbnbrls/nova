@@ -11,6 +11,8 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+      radicale:
+        condition: service_started
     ports:
       - "8080:8080"
     restart: unless-stopped
