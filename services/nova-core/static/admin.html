@@ -24,8 +24,8 @@
 
         <div class="chat-error hidden" id="admin-error-banner">Admin stream disconnected. Retrying…</div>
 
-        <main class="dashboard-grid">
-            <section class="dashboard-card glass-panel audit-panel" id="system-status-panel" style="grid-column: span 2;">
+        <main class="dashboard-grid admin-model-layout">
+            <section class="dashboard-card glass-panel audit-panel" id="system-status-panel">
                 <div class="card-header">
                     <h2>System Status</h2>
                 </div>
@@ -35,6 +35,15 @@
                         <span class="pulse-dot" aria-hidden="true"></span>
                         <div class="admin-service-status">Checking Ollama…</div>
                         <div class="admin-service-detail">—</div>
+                        <div class="model-selector-row">
+                            <select id="model-select" class="model-select" aria-label="Select model">
+                                <option value="">Loading models…</option>
+                            </select>
+                            <button id="model-switch-btn" class="btn btn-primary btn-small" disabled>Switch</button>
+                        </div>
+                        <div class="model-delete-area" id="model-delete-area" hidden>
+                            <!-- Per-model delete buttons rendered by admin.js -->
+                        </div>
                     </div>
                     <div class="admin-service-cell" id="service-postgres" data-status="" aria-label="Postgres: Checking…">
                         <div class="admin-service-name">Postgres</div>
@@ -63,7 +72,64 @@
                 </div>
             </section>
 
-            <section class="dashboard-card glass-panel audit-panel" id="channel-status-panel" style="grid-column: span 2;">
+            <section class="dashboard-card glass-panel audit-panel" id="model-store-panel">
+                <div class="card-header">
+                    <h2>Model Store</h2>
+                </div>
+                <div class="model-store-content">
+                    <p class="model-store-intro">Download new models from the Ollama library.</p>
+                    <div class="model-list" id="model-store-list">
+                        <div class="model-item" data-model-name="qwen3:14b">
+                            <span class="model-item-name">qwen3:14b</span>
+                            <span class="model-item-meta">14B · Q4_K_M</span>
+                            <button class="btn btn-primary btn-small model-pull-btn" data-pull-model="qwen3:14b">Pull</button>
+                        </div>
+                        <div class="model-item" data-model-name="gemma4:12b">
+                            <span class="model-item-name">gemma4:12b</span>
+                            <span class="model-item-meta">12B · Q4_K_M</span>
+                            <button class="btn btn-primary btn-small model-pull-btn" data-pull-model="gemma4:12b">Pull</button>
+                        </div>
+                        <div class="model-item" data-model-name="llama3.2:3b">
+                            <span class="model-item-name">llama3.2:3b</span>
+                            <span class="model-item-meta">3B · Q4_K_M</span>
+                            <button class="btn btn-primary btn-small model-pull-btn" data-pull-model="llama3.2:3b">Pull</button>
+                        </div>
+                        <div class="model-item" data-model-name="llama3.1:8b">
+                            <span class="model-item-name">llama3.1:8b</span>
+                            <span class="model-item-meta">8B · Q4_K_M</span>
+                            <button class="btn btn-primary btn-small model-pull-btn" data-pull-model="llama3.1:8b">Pull</button>
+                        </div>
+                        <div class="model-item" data-model-name="mistral:7b">
+                            <span class="model-item-name">mistral:7b</span>
+                            <span class="model-item-meta">7B · Q4_K_M</span>
+                            <button class="btn btn-primary btn-small model-pull-btn" data-pull-model="mistral:7b">Pull</button>
+                        </div>
+                        <div class="model-item" data-model-name="phi-4:14b">
+                            <span class="model-item-name">phi-4:14b</span>
+                            <span class="model-item-meta">14B · Q4_K_M</span>
+                            <button class="btn btn-primary btn-small model-pull-btn" data-pull-model="phi-4:14b">Pull</button>
+                        </div>
+                        <div class="model-item" data-model-name="deepseek-coder-v2:16b">
+                            <span class="model-item-name">deepseek-coder-v2:16b</span>
+                            <span class="model-item-meta">16B · Q4_K_M</span>
+                            <button class="btn btn-primary btn-small model-pull-btn" data-pull-model="deepseek-coder-v2:16b">Pull</button>
+                        </div>
+                        <div class="model-item" data-model-name="nomic-embed-text">
+                            <span class="model-item-name">nomic-embed-text</span>
+                            <span class="model-item-meta">embedding</span>
+                            <button class="btn btn-primary btn-small model-pull-btn" data-pull-model="nomic-embed-text">Pull</button>
+                        </div>
+                    </div>
+                    <div class="model-custom-input-row">
+                        <input type="text" id="model-custom-name" class="model-custom-input"
+                               placeholder="Custom model name (e.g. llama3.2:3b)">
+                        <button id="model-custom-pull-btn" class="btn btn-primary btn-small">Pull Custom</button>
+                    </div>
+                    <div id="model-pull-progress-area"></div>
+                </div>
+            </section>
+
+            <section class="dashboard-card glass-panel audit-panel" id="channel-status-panel">
                 <div class="card-header">
                     <h2>Channel Status</h2>
                 </div>
@@ -90,6 +156,22 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Phase 41 — Model switch modal overlay -->
+            <div class="modal-overlay hidden" id="switch-modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 id="modal-title">Switching model…</h3>
+                    </div>
+                    <div id="modal-body">
+                        <div class="chat-loading" id="modal-loading-state">
+                            <div class="loading-spinner"></div>
+                            <p id="modal-status-text">Loading <span id="switch-model-name">model</span>…</p>
+                        </div>
+                        <div id="modal-error-state" class="modal-error hidden"></div>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
     <script src="/static/admin.js"></script>
