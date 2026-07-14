@@ -149,8 +149,18 @@ async def lifespan(app: FastAPI):
     global voice_room_manager
     voice_room_manager = RoomSessionManager(pool, ttl_minutes=30)
     
-    # DIAGNOSTIC: no background tasks, no scheduler — minimal lifespan
-    log.info("Lifespan: database + migrations complete, voice_room_manager initialized")
+    # Start background tasks as asyncio loops (replaces APScheduler)
+    await _start_background_tasks()
+
+    # CardDAV startup sync — guarded: skip if CalDAV not configured
+    if settings.caldav_username and settings.caldav_password:
+        try:
+            carddav_task = asyncio.create_task(_carddav_startup_sync())
+            carddav_task.add_done_callback(_handle_task_exception)
+        except Exception as e:
+            log.warning("Failed to create CardDAV sync task: %s", e)
+    else:
+        log.info("CardDAV sync skipped — CalDAV not configured")
 
     # Register Telegram bot command menu if enabled
     if settings.nova_telegram_enabled and settings.telegram_bot_token:
