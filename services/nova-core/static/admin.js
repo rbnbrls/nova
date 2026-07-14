@@ -110,7 +110,8 @@ function renderState(state) {
             }
         }
     }
-    document.getElementById('admin-error-banner').setAttribute('hidden', '');
+    const banner = document.getElementById('admin-error-banner');
+    if (banner) banner.setAttribute('hidden', '');
 }
 
 // SSE listener
@@ -124,7 +125,8 @@ eventSource.addEventListener('status', (event) => {
     }
 });
 eventSource.onerror = () => {
-    document.getElementById('admin-error-banner').removeAttribute('hidden');
+    const banner = document.getElementById('admin-error-banner');
+    if (banner) banner.removeAttribute('hidden');
 };
 
 // Phase 41 — Model management state
