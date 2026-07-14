@@ -1093,4 +1093,221 @@ body {
     gap: 0.75rem;
 }
 
+/* Phase 41 — Admin model management styles */
+
+/* Single-column layout for admin page (D-16) */
+.admin-model-layout {
+    grid-template-columns: 1fr !important;
+}
+
+.admin-model-layout .audit-panel {
+    grid-column: 1 !important;
+}
+
+/* Model selector row in Ollama card (D-01, D-02) */
+.model-selector-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+.model-select {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    outline: none;
+    cursor: pointer;
+}
+
+.model-select:focus {
+    border-color: var(--accent-light);
+}
+
+.btn-small {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Delete buttons area (D-13) */
+.model-delete-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.4rem;
+}
+
+.model-delete-btn {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.model-delete-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+.model-delete-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Amber pulse-dot for model loading (D-07) */
+.admin-service-cell[data-status="loading"] .pulse-dot {
+    background: #f59e0b !important;
+    box-shadow: 0 0 8px #f59e0b;
+    animation: pulse 1s ease-in-out infinite;
+}
+
+.admin-service-status.loading {
+    color: #f59e0b;
+}
+
+/* Model store card (D-09, D-10) */
+.model-store-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.model-store-intro {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.model-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.model-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.8rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    gap: 0.5rem;
+}
+
+.model-item-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    flex: 1;
+}
+
+.model-item-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-right: 0.5rem;
+}
+
+.model-custom-input-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.model-custom-input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 0.5rem 0.8rem;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.model-custom-input:focus {
+    border-color: var(--accent-light);
+}
+
+/* Pull progress (D-11, D-12) */
+.pull-progress-item {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pull-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.3rem;
+}
+
+.pull-progress-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--accent-color);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+
+.progress-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.progress-status.error {
+    color: #f87171;
+}
+
+/* Modal loading spinner (D-05) */
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 1rem auto;
+}
+
+/* Scoped to modal context — does not override dashboard .chat-loading (D-07) */
+#switch-modal .chat-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+    padding: 1rem 0;
+}
+
+#switch-modal .chat-loading p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
 
