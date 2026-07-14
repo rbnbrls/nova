@@ -89,17 +89,39 @@ async def lifespan(app: FastAPI):
     global voice_room_manager
     voice_room_manager = RoomSessionManager(pool, ttl_minutes=30)
     
-    # Register background jobs
-    scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails")
-    scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler")
-    scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications")
-    scheduler.add_job(check_at_risk_tasks, "interval", hours=1, id="check_at_risk_tasks")
+    # Register background jobs — first execution delayed by 5 min to avoid startup crash
+    from datetime import datetime, timezone, timedelta
+    _deferred = datetime.now(timezone.utc) + timedelta(minutes=5)
+    
+    scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails", next_run_time=_deferred)
+    scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler", next_run_time=_deferred)
+    scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications", next_run_time=_deferred)
+    scheduler.add_job(check_at_risk_tasks, "interval", hours=1, id="check_at_risk_tasks", next_run_time=_deferred)
 
     # Voice room session cleanup every 5 minutes
     if voice_room_manager is not None:
         scheduler.add_job(
             voice_room_manager.clear_expired, "interval", minutes=5,
-            id="voice_room_cleanup"
+            id="voice_room_cleanup", next_run_time=_deferred
+        )
+
+    # Register maintenance jobs (Phase 29) — all gated by maintenance_enabled
+    if settings.maintenance_enabled:
+        scheduler.add_job(
+            run_maintenance_dep_scan, "cron", hour=2, minute=0,
+            id="run_maintenance_dep_scan"
+        )
+        scheduler.add_job(
+            run_maintenance_log_anomaly, "cron", hour=3, minute=0,
+            id="run_maintenance_log_anomaly"
+        )
+        scheduler.add_job(
+            run_maintenance_backup_verify, "cron", hour=4, minute=0,
+            id="run_maintenance_backup_verify"
+        )
+        scheduler.add_job(
+            run_maintenance_trend_report, "cron", day_of_week="sun", hour=5, minute=0,
+            id="run_maintenance_trend_report"
         )
 
     # Register maintenance jobs (Phase 29) — all gated by maintenance_enabled
