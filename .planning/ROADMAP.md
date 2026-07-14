@@ -71,3 +71,28 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [ ] 40-02-PLAN.md — Frontend: `admin.html` (glass-panel system-status + channel-status cards + Back-to-Dashboard anchor), `admin.js` (EventSource named-event consumer + DOM-diffing renderer + escapeHtml + error banner), `style.css` admin block, frontend structure tests (D-06, D-07, D-09, D-10)
+
+### Phase 41: admin panel model switcher 
+
+Add a new feature, where the admin can visit the admin panel and switch models in ollama. The user must be able to switch between available models like: qwen3:14b and gemma4:12b and see when Ollama is available again. 
+Create an additional "model store" where the admin can browse new models to download and delete models not in use anymore.
+
+**Goal:** Admin panel extended with full Ollama model management — runtime model switching with persistent config (survives restart), live SSE-backed availability display, model store for browsing and downloading new models, and deletion of unused models — all wrapping the Ollama lifecycle behind the existing SSE-driven admin UI with a single-column glass-panel layout.
+
+**Requirements**: ADMIN-MODEL-01, ADMIN-MODEL-02, ADMIN-MODEL-03, ADMIN-MODEL-04, ADMIN-MODEL-05, ADMIN-MODEL-06, ADMIN-MODEL-07, ADMIN-MODEL-08, ADMIN-MODEL-09, ADMIN-MODEL-10
+**Depends on:** Phase 40
+**Plans:** 3 plans
+
+Plans:
+
+**Wave 0**
+
+- [ ] 41-01-PLAN.md — Foundation: DB migration (app_config table), config helpers, admin_models module with Ollama proxy functions (list, pull, delete, load) + background pull state tracking, llm.py runtime model resolution
+
+**Wave 1** *(blocked on Wave 0)*
+
+- [ ] 41-02-PLAN.md — Backend: model management POST/GET endpoints in main.py (switch, pull, delete, list) with input validation + extended _check_ollama() with model status + extended SSE payload with model loading and pull progress
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 41-03-PLAN.md — Frontend: admin.html single-column layout with model selector in Ollama card + model store card + switch modal overlay + admin.js model switch/pull/delete handlers with SSE model event integration + style.css model management styles
