@@ -129,6 +129,8 @@ eventSource.onerror = () => {
     if (banner) banner.removeAttribute('hidden');
 };
 
+window.addEventListener('beforeunload', () => eventSource.close());
+
 // Phase 41 — Model management state
 let currentActiveModel = '';
 let currentLocalModels = [];
