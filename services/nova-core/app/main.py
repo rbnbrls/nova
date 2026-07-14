@@ -123,9 +123,9 @@ async def lifespan(app: FastAPI):
                 if resp.status_code == 200:
                     log.info("Telegram command menu registered")
                 else:
-                    log.warning(f"Telegram command registration failed: {resp.status_code}")
+                    log.warning("Telegram command registration failed: %s", resp.status_code)
         except Exception as e:
-            log.warning(f"Telegram command registration error: {e}")
+            log.warning("Telegram command registration error: %s", e)
     
     yield
     # Shutdown scheduler and close database pool
@@ -152,7 +152,6 @@ async def health() -> dict:
 async def chat_completions(req: ChatCompletionRequest, request: Request, user: str | None = None, room: str | None = None) -> ChatCompletionResponse:
     """Run the agent loop for the latest user message and return the reply."""
     if settings.nova_api_token:
-        import hmac
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer ") or not hmac.compare_digest(auth[7:], settings.nova_api_token):
             raise HTTPException(status_code=401, detail="Unauthorized")
@@ -491,7 +490,7 @@ async def _check_imap() -> dict:
         if conn is None:
             return {"status": "down", "detail": "Not configured", "host": ""}
         # The user identifier is an email address — not a secret.  Mask to
-        # `user@host` for consistency with the dashboard preferences view.
+        # `user@…` (domain removed) for consistency with the dashboard preferences view.
         user = settings.nova_imap_user or ""
         if "@" in user:
             user = user.split("@", 1)[0] + "@…"
@@ -766,9 +765,6 @@ async def dashboard_chat(req: DashboardChatRequest) -> dict:
     if not req.message or not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    import logging
-    log = logging.getLogger("nova-core")
-
     try:
         reply = await run_agent(
             req.message.strip(),
@@ -777,7 +773,7 @@ async def dashboard_chat(req: DashboardChatRequest) -> dict:
             channel="dashboard",
         )
     except Exception as e:
-        log.error(f"Dashboard chat agent loop failed for {req.user}: {e}")
+        log.error("Dashboard chat agent loop failed for %s: %s", req.user, e)
         raise HTTPException(
             status_code=502,
             detail="Nova is having trouble right now. Please try again later.",
@@ -1422,7 +1418,6 @@ async def save_dnd_preferences(req: DNDSettingsRequest):
     return {"status": "success"}
 
 
-import os
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
