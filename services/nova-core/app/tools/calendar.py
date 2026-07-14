@@ -52,7 +52,7 @@ def _get_calendar() -> caldav.Calendar:
     principal = client.principal()
     calendars = principal.calendars()
     if not calendars:
-        cal = principal.make_calendar(name="Household", calendar_id="household")
+        cal = principal.make_calendar(name="Household", cal_id="household")
     else:
         cal = calendars[0]
 
