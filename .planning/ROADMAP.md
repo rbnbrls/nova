@@ -138,13 +138,13 @@ Plans:
 
 **Requirements**: HOUSEHOLD-PLAN-04, HOUSEHOLD-PLAN-05
 **Depends on:** Phase 42
-**Plans:** 1/1 plans complete
+**Plans:** 1 plan
 
 Plans:
 
 **Wave 1**
 
-- [ ] 43-01-PLAN.md — New planner service/module (for example `app/planning.py`) that reads task/calendar state, computes a daily/weekly schedule, persists generated blocks, and exposes internal helpers for scoring, slot selection, and rescheduling; add tests for deadline ordering, conflict avoidance, and deterministic output
+- [ ] 43-01-PLAN.md — Planner module (`app/planning.py`) with scoring, slot selection, schedule builder, persistence (`planned_blocks` table via migration 0014), `generate_plan` tool, dashboard plan endpoint/stream integration, and tests for determinism, conflict avoidance, and deadline ordering
 
 **Acceptance criteria**
 
@@ -158,7 +158,7 @@ Plans:
 
 **Requirements**: HOUSEHOLD-PLAN-06, HOUSEHOLD-PLAN-07, HOUSEHOLD-PLAN-08
 **Depends on:** Phase 43
-**Plans:** 1/1 plans complete
+**Plans:** 1 plan
 
 Plans:
 
