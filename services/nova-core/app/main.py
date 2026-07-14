@@ -43,74 +43,14 @@ from .tools.home_assistant import _ha_get
 from .voice_rooms import RoomSessionManager
 from .contacts_sync import sync_all_contacts as _carddav_sync_all
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, check_at_risk_tasks, run_briefing_scheduler, process_queued_notifications, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
 
 log = logging.getLogger("nova-core")
 
+scheduler = AsyncIOScheduler()
+
 voice_room_manager: RoomSessionManager | None = None
-
-
-async def _periodic_task(name: str, interval_sec: int, coro_fn, *args, **kwargs):
-    """Run an async function periodically with a fixed delay between executions.
-    
-    Replaces APScheduler AsyncIOScheduler which causes a process crash
-    in Python 3.12 when scheduler.start() is called (segfault or OOM).
-    This implementation uses a simple asyncio loop and catches all
-    exceptions to avoid crashing the process.
-    
-    The first execution is delayed by 90 seconds to give the application
-    time to fully initialize before any background work begins.
-    """
-    try:
-        await asyncio.sleep(90)
-    except asyncio.CancelledError:
-        return
-    while True:
-        try:
-            await coro_fn(*args, **kwargs)
-        except Exception as exc:
-            log.warning("Periodic task %s failed: %s: %s", name, type(exc).__name__, exc)
-        try:
-            await asyncio.sleep(interval_sec)
-        except asyncio.CancelledError:
-            break
-
-
-async def _start_background_tasks():
-    """Start all periodic background tasks as asyncio tasks.
-    
-    Called from the lifespan handler. Each task runs independently;
-    a failure in one does not affect the others (D-02 isolation).
-    """
-    tasks = [
-        _periodic_task("check_new_emails", 300, check_new_emails),
-        _periodic_task("run_briefing_scheduler", 60, run_briefing_scheduler),
-        _periodic_task("process_queued_notifications", 60, process_queued_notifications),
-        _periodic_task("check_at_risk_tasks", 3600, check_at_risk_tasks),
-    ]
-    if settings.maintenance_enabled:
-        # Maintenance jobs run on cron-like schedule (checked every 60s)
-        async def _maintenance_tick():
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc)
-            hour = now.hour
-            day = now.weekday()
-            if hour == 2 and now.minute == 0:
-                await run_maintenance_dep_scan()
-            if hour == 3 and now.minute == 0:
-                await run_maintenance_log_anomaly()
-            if hour == 4 and now.minute == 0:
-                await run_maintenance_backup_verify()
-            if hour == 5 and now.minute == 0 and day == 6:
-                await run_maintenance_trend_report()
-        tasks.append(_periodic_task("maintenance_tick", 60, _maintenance_tick))
-    
-    for task_coro in tasks:
-        try:
-            t = asyncio.create_task(task_coro)
-            t.add_done_callback(_handle_task_exception)
-        except Exception as e:
-            log.warning("Failed to start background task: %s", e)
 
 
 def _handle_task_exception(task: asyncio.Task) -> None:
@@ -129,6 +69,54 @@ def _handle_task_exception(task: asyncio.Task) -> None:
                         task.get_name(), type(exc).__name__, exc)
     except asyncio.CancelledError:
         pass  # Task was cancelled — not an error.
+
+def _handle_task_exception(task: asyncio.Task) -> None:
+    """Log any unhandled exception from a background asyncio task."""
+    try:
+        exc = task.exception()
+        if exc is not None:
+            log.warning("Background task %s raised: %s: %s",
+                        task.get_name(), type(exc).__name__, exc)
+    except asyncio.CancelledError:
+        pass
+
+
+def _run_scheduler_loop():
+    """Run background scheduler jobs in a dedicated event loop (separate thread).
+    
+    This keeps background work isolated from uvicorn's main event loop,
+    preventing any scheduler-related crashes from taking down the application.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_scheduler_main())
+    except Exception:
+        log.warning("Scheduler thread exited with error", exc_info=True)
+    finally:
+        loop.close()
+
+
+async def _scheduler_main():
+    """Periodic scheduler loop — runs every 60s and dispatches jobs."""
+    # Initial delay to let the application stabilize
+    await asyncio.sleep(90)
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            # Run check_new_emails every 5 minutes
+            if now.minute % 5 == 0 and now.second < 5:
+                await check_new_emails()
+            # Run every minute
+            await run_briefing_scheduler()
+            await process_queued_notifications()
+            # Run check_at_risk_tasks once per hour
+            if now.minute == 0 and now.second < 5:
+                await check_at_risk_tasks()
+        except Exception as exc:
+            log.warning("Scheduler tick failed: %s: %s", type(exc).__name__, exc)
+        await asyncio.sleep(55)
+
 
 # WhoAmI intent detection: matches "I'm Ruben", "I am Méral", "Nova, this is Ruben", etc.
 _WHOAMI_PATTERN = re.compile(
@@ -149,8 +137,13 @@ async def lifespan(app: FastAPI):
     global voice_room_manager
     voice_room_manager = RoomSessionManager(pool, ttl_minutes=30)
     
-    # Start background tasks as asyncio loops (replaces APScheduler)
-    await _start_background_tasks()
+    # Start background scheduler in a SEPARATE thread with its own event loop
+    # to isolate from uvicorn's event loop (which crashes when scheduler runs)
+    import threading as _threading
+    _scheduler_thread = _threading.Thread(
+        target=_run_scheduler_loop, daemon=True, name="scheduler"
+    )
+    _scheduler_thread.start()
 
     # CardDAV startup sync — guarded: skip if CalDAV not configured
     if settings.caldav_username and settings.caldav_password:
@@ -186,8 +179,7 @@ async def lifespan(app: FastAPI):
             log.warning("Telegram command registration error: %s", e)
     
     yield
-    # Close database pool
-    # Background asyncio tasks are cancelled automatically by the event loop shutdown
+    # Close database pool (scheduler thread exits automatically when process shuts down)
     try:
         await db.close_pool()
     except Exception as e:
