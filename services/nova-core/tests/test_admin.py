@@ -109,6 +109,7 @@ def test_admin_stream_payload_shape(client):
                 "telegram": {"linked": False, "identifier": ""},
             },
         },
+        "models": {"pulling": []},
     }
     with patch("app.main._collect_admin_status", new_callable=AsyncMock) as mock_status, \
          patch("app.main.StreamingResponse", new=DummyStreamingResponse):
@@ -123,6 +124,8 @@ def test_admin_stream_payload_shape(client):
             parsed = json.loads(second_line[len("data: "):])
             assert "services" in parsed
             assert "channels" in parsed
+            assert "models" in parsed
+            assert "pulling" in parsed["models"]
             for svc_name in ("ollama", "postgres", "caldav", "ha", "email"):
                 assert svc_name in parsed["services"]
                 entry = parsed["services"][svc_name]
@@ -138,21 +141,33 @@ def test_admin_stream_payload_shape(client):
 
 
 async def test_check_ollama():
-    """_check_ollama ok branch: llm.is_ready True -> status ok, detail has model, host host:port."""
+    """_check_ollama ok branch: returns model.active, model.loading, models."""
     with patch("app.main.llm.is_ready", new_callable=AsyncMock) as mock_ready, \
-         patch("app.main.settings") as mock_settings:
+         patch("app.main.settings") as mock_settings, \
+         patch("app.main.admin_models.list_models", new_callable=AsyncMock) as mock_list, \
+         patch("app.main.admin_models.get_loading_model") as mock_loading, \
+         patch("app.main.get_active_model_sync") as mock_active:
         mock_ready.return_value = True
         mock_settings.nova_model = "qwen3:14b"
         mock_settings.ollama_base_url = "http://localhost:11434"
+        mock_list.return_value = [{"name": "qwen3:14b"}]
+        mock_loading.return_value = None
+        mock_active.return_value = "qwen3:14b"
         from app.main import _check_ollama
         result = await _check_ollama()
     assert result["status"] == "ok"
     assert "qwen3:14b" in result["detail"]
     assert result["host"] == "localhost:11434"
+    assert "model" in result
+    assert result["model"]["active"] == "qwen3:14b"
+    assert result["model"]["loading"] is False
+    assert result["model"]["loading_name"] == ""
+    assert "models" in result
+    assert len(result["models"]) == 1
 
 
 async def test_check_ollama_down():
-    """_check_ollama down branch: is_ready False -> status down."""
+    """_check_ollama down branch: is_ready False -> status down, model fields empty."""
     with patch("app.main.llm.is_ready", new_callable=AsyncMock) as mock_ready, \
          patch("app.main.settings") as mock_settings:
         mock_ready.return_value = False
@@ -161,6 +176,9 @@ async def test_check_ollama_down():
         from app.main import _check_ollama
         result = await _check_ollama()
     assert result["status"] == "down"
+    assert result["model"]["active"] == ""
+    assert result["model"]["loading"] is False
+    assert result["models"] == []
 
 
 async def test_check_postgres():

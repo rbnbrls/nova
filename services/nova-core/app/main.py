@@ -27,10 +27,10 @@ from fastapi import FastAPI, Request, Query, BackgroundTasks, Response, HTTPExce
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import llm, db
+from . import admin_models, llm, db
 from .agent import run_agent
-from .config import settings
-from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest, LinkWhatsAppStartRequest, LinkWhatsAppVerifyRequest, LinkTelegramStartRequest, LinkTelegramVerifyRequest, DashboardChatRequest
+from .config import get_active_model_sync, set_active_model, settings
+from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest, LinkWhatsAppStartRequest, LinkWhatsAppVerifyRequest, LinkTelegramStartRequest, LinkTelegramVerifyRequest, DashboardChatRequest, ModelSwitchRequest, ModelPullRequest, ModelDeleteRequest, validate_model_name
 from .security import verify_whatsapp_signature, verify_telegram_signature
 from .channels.whatsapp import process_incoming_whatsapp, send_whatsapp_otp
 from .channels.telegram import process_incoming_telegram, _handle_telegram_command, send_telegram_otp
@@ -356,16 +356,58 @@ def _mask_identifier(number: str) -> str:
 
 
 async def _check_ollama() -> dict:
-    """Ollama health check — reuses llm.is_ready()."""
+    """Ollama health check — includes active model + loading state + local models.
+
+    Returns extended payload with ``model.active``, ``model.loading``,
+    ``model.loading_name``, and top-level ``models`` (local model list).
+    Auto-clears the loading flag when the target model is detected as
+    locally available (D-05).
+    """
     host = _host_only(settings.ollama_base_url)
     try:
         ready = await llm.is_ready()
-        if ready:
-            return {"status": "ok", "detail": f"Model: {settings.nova_model}", "host": host}
-        return {"status": "down", "detail": f"Ollama not responding at {host}", "host": host}
+        if not ready:
+            return {
+                "status": "down",
+                "detail": f"Ollama not responding at {host}",
+                "host": host,
+                "model": {"active": "", "loading": False, "loading_name": ""},
+                "models": [],
+            }
+
+        local_models = await admin_models.list_models()
+        active_model = get_active_model_sync()
+        loading_model = admin_models.get_loading_model()
+
+        # Auto-clear: if the loading model is now listed locally, clear the
+        # flag so the frontend modal auto-closes (D-05).
+        if loading_model and any(m.get("name") == loading_model for m in local_models):
+            admin_models.set_loading_model(None)
+            loading_model = None
+
+        status = "loading" if loading_model else "ok"
+        detail = f"Model: {active_model}"
+
+        return {
+            "status": status,
+            "detail": detail,
+            "host": host,
+            "model": {
+                "active": active_model,
+                "loading": bool(loading_model),
+                "loading_name": loading_model or "",
+            },
+            "models": local_models,
+        }
     except Exception as exc:
         log.warning("admin _check_ollama failed: %s", exc)
-        return {"status": "down", "detail": f"Ollama not responding at {host}", "host": host}
+        return {
+            "status": "down",
+            "detail": f"Ollama not responding at {host}",
+            "host": host,
+            "model": {"active": "", "loading": False, "loading_name": ""},
+            "models": [],
+        }
 
 
 async def _check_postgres() -> dict:
@@ -477,7 +519,16 @@ async def _collect_admin_status() -> dict:
             services[key] = result
 
     channels = await _collect_channel_status()
-    return {"services": services, "channels": channels}
+
+    # Phase 41 — model pull progress
+    pulling_tasks = await admin_models.get_all_pull_tasks()
+    models_payload = {
+        "pulling": [
+            {"name": t.model, "status": t.status, "progress": t.progress, "message": t.message}
+            for t in pulling_tasks
+        ],
+    }
+    return {"services": services, "channels": channels, "models": models_payload}
 
 
 async def _collect_channel_status() -> dict:
@@ -534,8 +585,10 @@ async def admin_stream():
     """Unauthenticated SSE stream of the admin status payload (D-08, D-10).
 
     Emits a named `event: status` SSE event with a JSON payload of shape
-    `{"services": {...5 entries...}, "channels": {Ruben, Meral}}` every
-    45 seconds.  No auth challenge is enforced — LAN trust only (D-08).
+    `{"services": {...5 entries...}, "channels": {Ruben, Meral},
+      "models": {"pulling": [...]}}` every 5 s (during active pulls) or
+    45 s (steady state).  No auth challenge is enforced — LAN trust only
+    (D-08).
     """
 
     async def event_generator():
@@ -549,13 +602,137 @@ async def admin_stream():
             # Sleep is OUTSIDE the try so cancellation (client disconnect)
             # can interrupt the wait — required by FastAPI cancellation
             # semantics (T-40-07).
-            await asyncio.sleep(45)
+            # Phase 41: 5s cadence during active model pulls, 45s otherwise
+            active_pulls = await admin_models.get_all_pull_tasks()
+            has_active = any(
+                t.status in ("pending", "downloading", "extracting")
+                for t in active_pulls
+            )
+            await asyncio.sleep(5 if has_active else 45)
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin model management — Phase 41 (LAN trust, no auth per D-08)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/admin/model/list")
+async def admin_model_list():
+    """List all locally available models and active pull tasks.
+
+    Returns ``{"local": [...], "pulling": [...]}``.  Pull tasks are
+    extracted from the module-level tracker used by the SSE generator.
+    """
+    try:
+        local = await admin_models.list_models()
+        pulling_tasks = await admin_models.get_all_pull_tasks()
+        pulling = [
+            {"name": t.model, "status": t.status, "progress": t.progress, "message": t.message}
+            for t in pulling_tasks
+        ]
+        return {"local": local, "pulling": pulling}
+    except Exception:
+        log.warning("admin_model_list failed, returning empty")
+        return {"local": [], "pulling": []}
+
+
+@app.post("/admin/model/switch")
+async def admin_model_switch(req: ModelSwitchRequest):
+    """Switch the active Ollama model (persistent across restarts).
+
+    1. Validate model name (regex)
+    2. Validate model exists locally via ``admin_models.list_models()``
+    3. Persist to ``app_config`` via ``set_active_model()``
+    4. Unload old model (fire-and-forget ``keep_alive=0``)
+    5. Set loading flag, load new model (blocking, up to 180s)
+    6. Roll back on failure
+    """
+    if not validate_model_name(req.model):
+        raise HTTPException(status_code=400, detail="Invalid model name")
+
+    local = await admin_models.list_models()
+    if not any(m.get("name") == req.model for m in local):
+        raise HTTPException(status_code=404, detail=f"Model '{req.model}' not found locally")
+
+    old_model = get_active_model_sync()
+
+    # Persist the new model
+    await set_active_model(req.model)
+
+    # Unload old model (fire-and-forget to free VRAM)
+    if old_model and old_model != req.model:
+        asyncio.create_task(admin_models.load_model(old_model, keep_alive="0"))
+
+    # Set loading flag for frontend modal (D-05)
+    admin_models.set_loading_model(req.model)
+
+    # Load new model — blocking up to 180s for VRAM loading
+    success = await admin_models.load_model(req.model)
+    if not success:
+        # Revert on failure
+        await set_active_model(old_model)
+        admin_models.set_loading_model(None)
+        raise HTTPException(status_code=502, detail=f"Failed to load model '{req.model}'")
+
+    return {"status": "switched", "model": req.model}
+
+
+@app.post("/admin/model/pull")
+async def admin_model_pull(req: ModelPullRequest):
+    """Start a background model pull from the Ollama registry.
+
+    Validates the model name, checks for concurrent pulls, then launches
+    ``admin_models.pull_model()`` as a background task.  Progress is
+    tracked in the module-level ``_pull_tasks`` dict and pushed to the
+    frontend via SSE.
+    """
+    if not validate_model_name(req.model):
+        raise HTTPException(status_code=400, detail="Invalid model name")
+
+    # Check concurrent pull (per-model)
+    existing = await admin_models.get_pull_status(req.model)
+    if existing and existing.status in ("pending", "downloading", "extracting"):
+        raise HTTPException(status_code=409, detail="A pull is already in progress for this model")
+
+    # Check concurrent pull (global — one active pull at a time)
+    all_tasks = await admin_models.get_all_pull_tasks()
+    if any(t.status in ("pending", "downloading", "extracting") for t in all_tasks):
+        raise HTTPException(status_code=409, detail="A pull is already in progress")
+
+    # Start background task
+    asyncio.create_task(admin_models.pull_model(req.model))
+
+    return {"status": "started", "model": req.model}
+
+
+@app.post("/admin/model/delete")
+async def admin_model_delete(req: ModelDeleteRequest):
+    """Delete a model from the local Ollama registry.
+
+    Blocks deletion of the currently active model (backend enforcement
+    per D-14 — frontend also disables the button but backend MUST check).
+    """
+    if not validate_model_name(req.model):
+        raise HTTPException(status_code=400, detail="Invalid model name")
+
+    # Block active model deletion (backend enforcement — D-14)
+    if req.model == get_active_model_sync():
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete the active model. Switch to another model first.",
+        )
+
+    result = await admin_models.delete_model(req.model)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result.get("detail", "Model not found"))
+
+    return {"status": "deleted", "model": req.model}
 
 
 @app.post("/dashboard/chat")

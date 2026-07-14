@@ -5,6 +5,7 @@ so Nova Core speaks just enough of that shape.
 """
 from __future__ import annotations
 
+import re
 import time
 import uuid
 
@@ -94,6 +95,30 @@ class DashboardChatRequest(BaseModel):
 
 class DashboardChatResponse(BaseModel):
     reply: str
+
+
+# ---------------------------------------------------------------------------
+# Phase 41 — Model management request schemas
+# ---------------------------------------------------------------------------
+
+_MODEL_NAME_RE = re.compile(r"^[a-zA-Z0-9:_\-./]+$")
+
+
+def validate_model_name(name: str) -> bool:
+    """Return True if *name* matches the allowed model-name pattern."""
+    return bool(_MODEL_NAME_RE.match(name))
+
+
+class ModelSwitchRequest(BaseModel):
+    model: str
+
+
+class ModelPullRequest(BaseModel):
+    model: str
+
+
+class ModelDeleteRequest(BaseModel):
+    model: str
 
 
 
