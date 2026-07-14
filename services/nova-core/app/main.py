@@ -185,7 +185,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request, user: s
     try:
         reply = await run_agent(last, user=resolved_user, history=history, channel="api")
     except Exception as e:
-        print(f"[ERROR] Agent loop failed: {e}")
+        log.error("Agent loop failed: %s", e)
         reply = "Nova is having trouble right now, please try again later."
 
     return ChatCompletionResponse(
@@ -306,7 +306,7 @@ async def dashboard_stream():
                 }
                 yield f"data: {json.dumps(payload)}\n\n"
             except Exception as e:
-                print(f"[ERROR] SSE generator error: {e}")
+                log.warning("SSE generator error: %s", e)
             await asyncio.sleep(15)
             
     return StreamingResponse(event_generator(), media_type="text/event-stream")
