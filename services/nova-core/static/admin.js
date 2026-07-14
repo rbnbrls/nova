@@ -263,6 +263,14 @@ function renderModelDropdown(models) {
     if (currentValue && Array.from(dropdown.options).some(o => o.value === currentValue)) {
         dropdown.value = currentValue;
     }
+    updateSwitchButton();
+}
+
+function updateSwitchButton() {
+    const dropdown = document.getElementById('model-select');
+    const switchBtn = document.getElementById('model-switch-btn');
+    if (!dropdown || !switchBtn) return;
+    switchBtn.disabled = !dropdown.value;
 }
 
 function updateModelStore(localModels) {
@@ -344,6 +352,8 @@ function renderDeleteButtons(models) {
 document.addEventListener('DOMContentLoaded', () => {
     const switchBtn = document.getElementById('model-switch-btn');
     if (switchBtn) switchBtn.addEventListener('click', handleModelSwitch);
+    const modelSelect = document.getElementById('model-select');
+    if (modelSelect) modelSelect.addEventListener('change', updateSwitchButton);
 
     const customPullBtn = document.getElementById('model-custom-pull-btn');
     const customInput = document.getElementById('model-custom-name');
