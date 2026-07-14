@@ -43,14 +43,74 @@ from .tools.home_assistant import _ha_get
 from .voice_rooms import RoomSessionManager
 from .contacts_sync import sync_all_contacts as _carddav_sync_all
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, check_at_risk_tasks, run_briefing_scheduler, process_queued_notifications, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
 
 log = logging.getLogger("nova-core")
 
-scheduler = AsyncIOScheduler()
-
 voice_room_manager: RoomSessionManager | None = None
+
+
+async def _periodic_task(name: str, interval_sec: int, coro_fn, *args, **kwargs):
+    """Run an async function periodically with a fixed delay between executions.
+    
+    Replaces APScheduler AsyncIOScheduler which causes a process crash
+    in Python 3.12 when scheduler.start() is called (segfault or OOM).
+    This implementation uses a simple asyncio loop and catches all
+    exceptions to avoid crashing the process.
+    
+    The first execution is delayed by 90 seconds to give the application
+    time to fully initialize before any background work begins.
+    """
+    try:
+        await asyncio.sleep(90)
+    except asyncio.CancelledError:
+        return
+    while True:
+        try:
+            await coro_fn(*args, **kwargs)
+        except Exception as exc:
+            log.warning("Periodic task %s failed: %s: %s", name, type(exc).__name__, exc)
+        try:
+            await asyncio.sleep(interval_sec)
+        except asyncio.CancelledError:
+            break
+
+
+async def _start_background_tasks():
+    """Start all periodic background tasks as asyncio tasks.
+    
+    Called from the lifespan handler. Each task runs independently;
+    a failure in one does not affect the others (D-02 isolation).
+    """
+    tasks = [
+        _periodic_task("check_new_emails", 300, check_new_emails),
+        _periodic_task("run_briefing_scheduler", 60, run_briefing_scheduler),
+        _periodic_task("process_queued_notifications", 60, process_queued_notifications),
+        _periodic_task("check_at_risk_tasks", 3600, check_at_risk_tasks),
+    ]
+    if settings.maintenance_enabled:
+        # Maintenance jobs run on cron-like schedule (checked every 60s)
+        async def _maintenance_tick():
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            hour = now.hour
+            day = now.weekday()
+            if hour == 2 and now.minute == 0:
+                await run_maintenance_dep_scan()
+            if hour == 3 and now.minute == 0:
+                await run_maintenance_log_anomaly()
+            if hour == 4 and now.minute == 0:
+                await run_maintenance_backup_verify()
+            if hour == 5 and now.minute == 0 and day == 6:
+                await run_maintenance_trend_report()
+        tasks.append(_periodic_task("maintenance_tick", 60, _maintenance_tick))
+    
+    for task_coro in tasks:
+        try:
+            t = asyncio.create_task(task_coro)
+            t.add_done_callback(_handle_task_exception)
+        except Exception as e:
+            log.warning("Failed to start background task: %s", e)
 
 
 def _handle_task_exception(task: asyncio.Task) -> None:
@@ -89,59 +149,8 @@ async def lifespan(app: FastAPI):
     global voice_room_manager
     voice_room_manager = RoomSessionManager(pool, ttl_minutes=30)
     
-    # Register background jobs — first execution delayed by 5 min to avoid startup crash
-    from datetime import datetime, timezone, timedelta
-    _deferred = datetime.now(timezone.utc) + timedelta(minutes=5)
-    
-    scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails", next_run_time=_deferred)
-    scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler", next_run_time=_deferred)
-    scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications", next_run_time=_deferred)
-    scheduler.add_job(check_at_risk_tasks, "interval", hours=1, id="check_at_risk_tasks", next_run_time=_deferred)
-
-    # Voice room session cleanup every 5 minutes
-    if voice_room_manager is not None:
-        scheduler.add_job(
-            voice_room_manager.clear_expired, "interval", minutes=5,
-            id="voice_room_cleanup", next_run_time=_deferred
-        )
-
-    # Register maintenance jobs (Phase 29) — all gated by maintenance_enabled
-    if settings.maintenance_enabled:
-        scheduler.add_job(
-            run_maintenance_dep_scan, "cron", hour=2, minute=0,
-            id="run_maintenance_dep_scan"
-        )
-        scheduler.add_job(
-            run_maintenance_log_anomaly, "cron", hour=3, minute=0,
-            id="run_maintenance_log_anomaly"
-        )
-        scheduler.add_job(
-            run_maintenance_backup_verify, "cron", hour=4, minute=0,
-            id="run_maintenance_backup_verify"
-        )
-        scheduler.add_job(
-            run_maintenance_trend_report, "cron", day_of_week="sun", hour=5, minute=0,
-            id="run_maintenance_trend_report"
-        )
-
-    # Register maintenance jobs (Phase 29) — all gated by maintenance_enabled
-    if settings.maintenance_enabled:
-        scheduler.add_job(
-            run_maintenance_dep_scan, "cron", hour=2, minute=0,
-            id="run_maintenance_dep_scan"
-        )
-        scheduler.add_job(
-            run_maintenance_log_anomaly, "cron", hour=3, minute=0,
-            id="run_maintenance_log_anomaly"
-        )
-        scheduler.add_job(
-            run_maintenance_backup_verify, "cron", hour=4, minute=0,
-            id="run_maintenance_backup_verify"
-        )
-        scheduler.add_job(
-            run_maintenance_trend_report, "cron", day_of_week="sun", hour=5, minute=0,
-            id="run_maintenance_trend_report"
-        )
+    # Start background tasks as asyncio loops (replaces APScheduler which crashes on Python 3.12)
+    await _start_background_tasks()
 
     # CardDAV startup sync — guarded: skip if CalDAV not configured
     if settings.caldav_username and settings.caldav_password:
@@ -150,17 +159,8 @@ async def lifespan(app: FastAPI):
             carddav_task.add_done_callback(_handle_task_exception)
         except Exception as e:
             log.warning("Failed to create CardDAV sync task: %s", e)
-        scheduler.add_job(
-            _carddav_startup_sync, "interval", minutes=15,
-            id="carddav_sync", replace_existing=True
-        )
     else:
         log.info("CardDAV sync skipped — CalDAV not configured")
-
-    try:
-        scheduler.start()
-    except Exception as e:
-        log.warning("Failed to start scheduler: %s", e)
 
     # Register Telegram bot command menu if enabled
     if settings.nova_telegram_enabled and settings.telegram_bot_token:
@@ -186,11 +186,8 @@ async def lifespan(app: FastAPI):
             log.warning("Telegram command registration error: %s", e)
     
     yield
-    # Shutdown scheduler and close database pool
-    try:
-        scheduler.shutdown()
-    except Exception as e:
-        log.warning("Scheduler shutdown error: %s", e)
+    # Close database pool
+    # Background asyncio tasks are cancelled automatically by the event loop shutdown
     try:
         await db.close_pool()
     except Exception as e:
