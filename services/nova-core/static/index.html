@@ -29,10 +29,28 @@
                     <h2>Active Todos</h2>
                     <span class="badge" id="tasks-count">0</span>
                 </div>
+                <div class="label-filter-bar" id="label-filter-bar">
+                    <span class="label-filter-label">Filter:</span>
+                    <button class="label-filter-pill active" data-label="">All</button>
+                    <div id="label-filter-dynamic" class="label-filter-dynamic"></div>
+                </div>
                 <div class="assignee-groups" id="tasks-content">
                     <div class="placeholder-loader">Connecting to task feed...</div>
                 </div>
             </section>
+
+            <!-- Slide-out task detail panel -->
+            <div id="task-detail-overlay" class="task-detail-overlay hidden">
+                <div class="task-detail-panel">
+                    <div class="task-detail-header">
+                        <h3 id="task-detail-title">Task Detail</h3>
+                        <button class="task-detail-close" id="task-detail-close">&times;</button>
+                    </div>
+                    <div class="task-detail-body" id="task-detail-body">
+                        <div class="placeholder-loader">Loading...</div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Right Side: Calendar Events -->
             <section class="dashboard-card glass-panel" id="events-panel">

@@ -1,16 +1,22 @@
 """Calendar tool using self-hosted CalDAV (Radicale)."""
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import datetime
+from datetime import date, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 import caldav
 from icalendar import Calendar as iCalendar, Event as iEvent
 
 from .base import tool
 from ..config import settings
+from ..replanning import replan_if_needed
 
 log = logging.getLogger("nova-core.calendar")
+
+_WORK_DAY_START = 8
+_WORK_DAY_END = 22
 
 # CalDAV connection timeout in seconds — must match or be less than the
 # asyncio.wait_for timeout in _collect_admin_status (currently 5s).
@@ -177,7 +183,17 @@ async def create_event(title: str, start: str, end: str, description: str | None
     
     # Save to calendar
     calendar.save_event(ical.to_ical().decode("utf-8"))
-    
+
+    # Phase 44 — trigger replan if the new event conflicts with planned blocks
+    try:
+        event_start_date = start_dt.date() if isinstance(start_dt, datetime) else start_dt
+        if isinstance(event_start_date, date):
+            asyncio.create_task(
+                replan_if_needed("household", event_start_date, f"new event '{title}'")
+            )
+    except Exception as replan_err:
+        log.warning("replan trigger after create_event failed: %s", replan_err)
+
     parts = [f"'{title}'"]
     if description:
         parts.append(f"\"{description}\"")
@@ -261,14 +277,372 @@ async def detect_conflicts(start: datetime, end: datetime) -> list[dict]:
                 continue
 
             # Check overlap: A.start < B.end AND A.end > B.start
+            uid = str(vevent.uid.value) if hasattr(vevent, "uid") else ""
+
             if dtstart < end and dtend > start:
                 conflicts.append({
                     "title": summary,
                     "start": dtstart.isoformat(),
                     "end": dtend.isoformat(),
                     "location": location,
+                    "uid": uid,
                 })
         except Exception:
             continue
 
     return conflicts
+
+
+# ---------------------------------------------------------------------------
+# Plan 46-01: Calendar intelligence tools
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_calendar_events_range(start_dt: datetime, end_dt: datetime) -> list[dict[str, Any]]:
+    """Fetch all calendar events in a range and return as dicts with uid."""
+    calendar = _get_calendar()
+    events = calendar.search(start=start_dt, end=end_dt, event=True, expand=True)
+    results: list[dict[str, Any]] = []
+    for ev in events:
+        try:
+            vevent = ev.vobject_instance.vevent
+            ds = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
+            de = vevent.dtend.value if hasattr(vevent, "dtend") else None
+            if ds and de and isinstance(ds, datetime) and isinstance(de, datetime):
+                uid = str(vevent.uid.value) if hasattr(vevent, "uid") else ""
+                summary = vevent.summary.value if hasattr(vevent, "summary") else "Busy"
+                results.append({"start": ds, "end": de, "title": summary, "uid": uid})
+        except Exception:
+            continue
+    return results
+
+
+def _merge_occupied(occupied: list[dict[str, datetime]]) -> list[dict[str, datetime]]:
+    """Merge overlapping or adjacent occupied slots."""
+    if not occupied:
+        return []
+    sorted_slots = sorted(occupied, key=lambda o: o["start"])
+    merged: list[dict[str, datetime]] = [dict(sorted_slots[0])]
+    for o in sorted_slots[1:]:
+        if o["start"] <= merged[-1]["end"]:
+            merged[-1]["end"] = max(merged[-1]["end"], o["end"])
+        else:
+            merged.append(dict(o))
+    return merged
+
+
+@tool(
+    name="find_free_slots",
+    description="Find free time slots on the shared household calendar within a date range.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "start": {"type": "string", "description": "ISO date/datetime for range start."},
+            "end": {"type": "string", "description": "ISO date/datetime for range end."},
+            "duration_min": {"type": "integer", "description": "Minimum slot duration in minutes.", "default": 30},
+        },
+        "required": ["start", "end"],
+    },
+)
+async def find_free_slots(start: str, end: str, duration_min: int = 30) -> str:
+    try:
+        start_dt = _normalize_dt(start)
+        end_dt = _normalize_dt(end)
+    except ValueError:
+        return f"Error: Invalid date format: start='{start}', end='{end}'"
+
+    if duration_min < 1:
+        return "Error: duration_min must be at least 1 minute."
+
+    events = await _fetch_calendar_events_range(start_dt, end_dt)
+    occupied = [{"start": e["start"], "end": e["end"]} for e in events]
+    merged = _merge_occupied(occupied)
+
+    tz = ZoneInfo(settings.nova_timezone)
+    cursor_date = start_dt.date() if isinstance(start_dt, datetime) else start_dt
+    end_date = end_dt.date() if isinstance(end_dt, datetime) else end_dt
+
+    lines: list[str] = []
+    current = cursor_date
+    while current <= end_date:
+        day_start = datetime.combine(current, datetime.min.time(), tzinfo=tz).replace(hour=_WORK_DAY_START)
+        day_end = datetime.combine(current, datetime.min.time(), tzinfo=tz).replace(hour=_WORK_DAY_END)
+
+        cursor = day_start
+        day_slots: list[str] = []
+        for occ in merged:
+            if occ["end"] <= cursor or occ["start"] >= day_end:
+                continue
+            if occ["start"] > cursor:
+                gap_end = min(occ["start"], day_end)
+                gap_min = (gap_end - cursor).total_seconds() / 60
+                if gap_min >= duration_min:
+                    day_slots.append(f"{cursor.strftime('%H:%M')}–{gap_end.strftime('%H:%M')} ({int(gap_min)}min)")
+            cursor = max(cursor, occ["end"])
+            if cursor >= day_end:
+                break
+
+        if cursor < day_end:
+            gap_min = (day_end - cursor).total_seconds() / 60
+            if gap_min >= duration_min:
+                day_slots.append(f"{cursor.strftime('%H:%M')}–{day_end.strftime('%H:%M')} ({int(gap_min)}min)")
+
+        if day_slots:
+            lines.append(f"  {current.isoformat()}: {', '.join(day_slots)}")
+
+        current += timedelta(days=1)
+
+    if not lines:
+        return f"No free slots of at least {duration_min} minutes between {start} and {end}."
+
+    return f"Free slots (≥{duration_min}min) between {start} and {end}:\n" + "\n".join(lines)
+
+
+def _find_event_by_title(search_title: str, start_dt: datetime, end_dt: datetime) -> tuple:
+    """Find a single calendar event matching *search_title* (case-insensitive).
+
+    Returns (caldav.Event, vevent) tuple.
+    Raises ValueError if multiple matches.
+    Returns (None, None) if no match.
+    """
+    calendar = _get_calendar()
+    events = calendar.search(start=start_dt, end=end_dt, event=True, expand=False)
+
+    matches: list[tuple] = []
+    for ev in events:
+        try:
+            vevent = ev.vobject_instance.vevent
+            summary = vevent.summary.value if hasattr(vevent, "summary") else ""
+            if summary.strip().lower() == search_title.strip().lower():
+                matches.append((ev, vevent))
+        except Exception:
+            continue
+
+    if not matches:
+        return (None, None)
+    if len(matches) > 1:
+        raise ValueError(
+            f"Multiple events ({len(matches)}) match '{search_title}'. "
+            "Please narrow the search range or be more specific."
+        )
+    return matches[0]
+
+
+@tool(
+    name="edit_event",
+    description="Edit an existing calendar event by searching for its title within a date range.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "search_title": {"type": "string", "description": "Title of the event to edit (case-insensitive)."},
+            "start_range": {"type": "string", "description": "ISO datetime start of search range."},
+            "end_range": {"type": "string", "description": "ISO datetime end of search range."},
+            "new_title": {"type": "string", "description": "New title for the event."},
+            "new_start": {"type": "string", "description": "ISO datetime for new start time."},
+            "new_end": {"type": "string", "description": "ISO datetime for new end time."},
+            "new_description": {"type": "string", "description": "New description."},
+            "new_location": {"type": "string", "description": "New location."},
+        },
+        "required": ["search_title", "start_range", "end_range"],
+    },
+)
+async def edit_event(
+    search_title: str,
+    start_range: str,
+    end_range: str,
+    new_title: str | None = None,
+    new_start: str | None = None,
+    new_end: str | None = None,
+    new_description: str | None = None,
+    new_location: str | None = None,
+) -> str:
+    try:
+        start_dt = _normalize_dt(start_range)
+        end_dt = _normalize_dt(end_range)
+    except ValueError:
+        return f"Error: Invalid date format for search range: start='{start_range}', end='{end_range}'"
+
+    try:
+        match = _find_event_by_title(search_title, start_dt, end_dt)
+    except ValueError as e:
+        return f"Error: {e}"
+    if match[0] is None:
+        return f"Error: No event found with title '{search_title}' in the specified range."
+
+    ev, vevent = match
+
+    new_start_dt = _normalize_dt(new_start) if new_start else None
+    new_end_dt = _normalize_dt(new_end) if new_end else None
+
+    if new_start_dt and new_end_dt:
+        conflicts = await detect_conflicts(new_start_dt, new_end_dt)
+        existing_uid = str(vevent.uid.value) if hasattr(vevent, "uid") else ""
+        conflicts = [c for c in conflicts if c.get("uid", "") != existing_uid]
+        if conflicts:
+            return (
+                f"Warning: The proposed new time conflicts with existing events:\n"
+                + "\n".join(f"- {c['title']} ({c['start']} to {c['end']})" for c in conflicts[:5])
+                + f"\n\nEvent '{search_title}' was NOT updated. Please choose a different time."
+            )
+
+    changes: list[str] = []
+    if new_title:
+        vevent.summary.value = new_title
+        changes.append("title")
+    if new_start_dt:
+        vevent.dtstart.value = new_start_dt
+        changes.append("start time")
+    if new_end_dt:
+        vevent.dtend.value = new_end_dt
+        changes.append("end time")
+    if new_description is not None:
+        if hasattr(vevent, "description"):
+            vevent.description.value = new_description
+        else:
+            desc = vevent.add("description")
+            desc.value = new_description
+        changes.append("description")
+    if new_location is not None:
+        if hasattr(vevent, "location"):
+            vevent.location.value = new_location
+        else:
+            loc = vevent.add("location")
+            loc.value = new_location
+        changes.append("location")
+
+    if not changes:
+        return "No changes requested. Provide at least one field to update."
+
+    try:
+        ev.save()
+    except Exception as e:
+        return f"Error: Failed to save event: {e}"
+
+    log.info("Edited event '%s': %s", search_title, ", ".join(changes))
+    return f"Updated event '{search_title}': changed {', '.join(changes)}."
+
+
+@tool(
+    name="delete_event",
+    description="Delete a calendar event by searching for its title within a date range.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "search_title": {"type": "string", "description": "Title of the event to delete (case-insensitive)."},
+            "start_range": {"type": "string", "description": "ISO datetime start of search range."},
+            "end_range": {"type": "string", "description": "ISO datetime end of search range."},
+        },
+        "required": ["search_title", "start_range", "end_range"],
+    },
+)
+async def delete_event(search_title: str, start_range: str, end_range: str) -> str:
+    try:
+        start_dt = _normalize_dt(start_range)
+        end_dt = _normalize_dt(end_range)
+    except ValueError:
+        return f"Error: Invalid date format for search range: start='{start_range}', end='{end_range}'"
+
+    try:
+        match = _find_event_by_title(search_title, start_dt, end_dt)
+    except ValueError as e:
+        return f"Error: {e}"
+    if match[0] is None:
+        return f"Error: No event found with title '{search_title}' in the specified range."
+
+    ev, vevent = match
+    try:
+        ev.delete()
+    except Exception as e:
+        return f"Error: Failed to delete event: {e}"
+
+    log.info("Deleted event '%s'", search_title)
+    return f"Deleted event '{search_title}'."
+
+
+@tool(
+    name="reschedule_event",
+    description="Reschedule an existing event to a new time. For recurring events, the entire series is rescheduled.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "search_title": {"type": "string", "description": "Title of the event to reschedule (case-insensitive)."},
+            "start_range": {"type": "string", "description": "ISO datetime start of search range."},
+            "end_range": {"type": "string", "description": "ISO datetime end of search range."},
+            "new_start": {"type": "string", "description": "ISO datetime for new start time."},
+            "new_end": {"type": "string", "description": "ISO datetime for new end time."},
+        },
+        "required": ["search_title", "start_range", "end_range", "new_start", "new_end"],
+    },
+)
+async def reschedule_event(search_title: str, start_range: str, end_range: str, new_start: str, new_end: str) -> str:
+    try:
+        start_dt = _normalize_dt(start_range)
+        end_dt = _normalize_dt(end_range)
+        new_start_dt = _normalize_dt(new_start)
+        new_end_dt = _normalize_dt(new_end)
+    except ValueError:
+        return "Error: Invalid date format."
+
+    try:
+        match = _find_event_by_title(search_title, start_dt, end_dt)
+    except ValueError as e:
+        return f"Error: {e}"
+    if match[0] is None:
+        return f"Error: No event found with title '{search_title}' in the specified range."
+
+    ev, vevent = match
+
+    is_recurring = hasattr(vevent, "rrule") and vevent.rrule.value is not None
+
+    conflicts = await detect_conflicts(new_start_dt, new_end_dt)
+    existing_uid = str(vevent.uid.value) if hasattr(vevent, "uid") else ""
+    conflicts = [c for c in conflicts if c.get("uid", "") != existing_uid]
+    if conflicts:
+        return (
+            f"Warning: The proposed new time conflicts with existing events:\n"
+            + "\n".join(f"- {c['title']} ({c['start']} to {c['end']})" for c in conflicts[:5])
+            + f"\n\nEvent '{search_title}' was NOT rescheduled. Please choose a different time."
+        )
+
+    old_summary = vevent.summary.value if hasattr(vevent, "summary") else "?"
+    old_start_dt = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
+    old_start_str = old_start_dt.isoformat() if isinstance(old_start_dt, datetime) else str(old_start_dt)
+
+    original_description = vevent.description.value if hasattr(vevent, "description") else None
+    original_location = vevent.location.value if hasattr(vevent, "location") and vevent.location.value else None
+    original_rrule = str(vevent.rrule.value) if is_recurring else None
+
+    try:
+        ev.delete()
+    except Exception as e:
+        return f"Error: Failed to delete old event: {e}"
+
+    calendar = _get_calendar()
+    ical = iCalendar()
+    ical.add("prodid", "-//Nova Household Assistant//")
+    ical.add("version", "2.0")
+
+    new_vevent = iEvent()
+    new_vevent.add("summary", old_summary)
+    new_vevent.add("dtstart", new_start_dt)
+    new_vevent.add("dtend", new_end_dt)
+    if original_description:
+        new_vevent.add("description", original_description)
+    if original_location:
+        new_vevent.add("location", original_location)
+    if original_rrule:
+        new_vevent.add("rrule", original_rrule)
+
+    ical.add_component(new_vevent)
+
+    try:
+        calendar.save_event(ical.to_ical().decode("utf-8"))
+    except Exception as e:
+        return f"Error: Failed to create rescheduled event: {e}"
+
+    recurring_note = (
+        f"\nNote: '{old_summary}' is recurring. The entire series has been rescheduled."
+        if is_recurring else ""
+    )
+    log.info("Rescheduled event '%s' from %s to %s–%s", old_summary, old_start_str, new_start, new_end)
+    return f"Rescheduled '{old_summary}' from {old_start_str} to {new_start}–{new_end}.{recurring_note}"

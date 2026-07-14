@@ -31,31 +31,103 @@ eventSource.onerror = function(err) {
     document.querySelector('.pulse-dot').style.backgroundColor = '#ef4444';
 };
 
-// Render Tasks
+const LABEL_COLORS = {
+    'groceries': '#10b981',
+    'weekly': '#8b5cf6',
+    'urgent': '#ef4444',
+    'chore': '#f59e0b',
+    'errand': '#3b82f6',
+    'home': '#06b6d4',
+    'admin': '#ec4899',
+    'shopping': '#14b8a6',
+    'health': '#f97316',
+    'finance': '#84cc16',
+};
+
+function getLabelColor(label) {
+    return LABEL_COLORS[label.toLowerCase()] || '#6b7280';
+}
+
+let activeLabelFilter = '';
+let allTasksData = [];
+
+// Render Label Filter Bar
+function updateLabelFilters(tasks) {
+    const dynamicContainer = document.getElementById('label-filter-dynamic');
+    if (!dynamicContainer) return;
+
+    const labelSet = new Set();
+    tasks.forEach(t => {
+        if (t.labels && t.labels.length) {
+            t.labels.forEach(l => labelSet.add(l));
+        }
+    });
+    const sortedLabels = Array.from(labelSet).sort();
+
+    let html = '';
+    sortedLabels.forEach(label => {
+        const active = activeLabelFilter === label ? ' active' : '';
+        html += `<button class="label-filter-pill${active}" data-label="${escapeHtml(label)}" style="${active ? 'background:' + getLabelColor(label) + ';border-color:' + getLabelColor(label) + ';' : ''}">${escapeHtml(label)}</button>`;
+    });
+    dynamicContainer.innerHTML = html;
+
+    document.querySelectorAll('.label-filter-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const label = btn.getAttribute('data-label');
+            activeLabelFilter = activeLabelFilter === label ? '' : label;
+            document.querySelectorAll('.label-filter-pill').forEach(b => {
+                const isActive = b.getAttribute('data-label') === activeLabelFilter;
+                b.classList.toggle('active', isActive);
+                const lbl = b.getAttribute('data-label');
+                if (isActive && lbl) {
+                    b.style.background = getLabelColor(lbl);
+                    b.style.borderColor = getLabelColor(lbl);
+                } else {
+                    b.style.background = '';
+                    b.style.borderColor = '';
+                }
+            });
+            applyTaskFilter();
+        });
+    });
+}
+
+function applyTaskFilter() {
+    const filtered = activeLabelFilter
+        ? allTasksData.filter(t => t.labels && t.labels.includes(activeLabelFilter))
+        : allTasksData;
+    renderTaskCards(filtered);
+}
+
+// Render Tasks (enhanced)
 function updateTasks(tasks) {
+    allTasksData = tasks || [];
+    updateLabelFilters(allTasksData);
+    applyTaskFilter();
+}
+
+function renderTaskCards(tasks) {
     const container = document.getElementById('tasks-content');
     const countBadge = document.getElementById('tasks-count');
-    
+
     if (!tasks || tasks.length === 0) {
         container.innerHTML = '<div class="placeholder-loader">No active tasks.</div>';
         countBadge.textContent = '0';
         return;
     }
-    
+
     countBadge.textContent = tasks.length;
-    
-    // Group by assignee
+
     const groups = {};
     tasks.forEach(t => {
         const name = t.assignee.toLowerCase();
         if (!groups[name]) groups[name] = [];
         groups[name].push(t);
     });
-    
+
     let html = '';
     const now = new Date();
-    
-    // Render order: ruben, meral, household, others
+
     const sortedKeys = Object.keys(groups).sort((a, b) => {
         if (a === 'ruben') return -1;
         if (b === 'ruben') return 1;
@@ -65,18 +137,18 @@ function updateTasks(tasks) {
         if (b === 'household') return 1;
         return a.localeCompare(b);
     });
-    
+
     sortedKeys.forEach(name => {
         const groupTasks = groups[name];
         const displayName = name.charAt(0).toUpperCase() + name.slice(1);
         const sectionClass = name === 'household' ? 'assignee-section household' : 'assignee-section';
-        
+
         html += `
             <div class="${sectionClass}">
                 <div class="assignee-name">${displayName}</div>
                 <ul class="todo-list">
         `;
-        
+
         groupTasks.forEach(task => {
             let dueHtml = '';
             if (task.due_at) {
@@ -84,29 +156,183 @@ function updateTasks(tasks) {
                 const isOverdue = due < now;
                 const overdueClass = isOverdue ? 'todo-due overdue' : 'todo-due';
                 const formattedTime = due.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + due.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                dueHtml = `<span class="${overdueClass}">${isOverdue ? 'Overdue: ' : ''}${formattedTime}</span>`;
+                dueHtml = `<span class="${overdueClass}" onclick="event.stopPropagation()">${isOverdue ? 'Overdue: ' : ''}${formattedTime}</span>`;
             }
-            
+
             const overdueBadge = task.overdue
                 ? `<span class="badge badge-warning">OVERDUE</span> `
                 : '';
-            
+
+            // Label pills
+            let labelHtml = '';
+            if (task.labels && task.labels.length) {
+                labelHtml = '<span class="task-label-pills">';
+                task.labels.forEach(l => {
+                    labelHtml += `<span class="task-label-pill" style="background:${getLabelColor(l)}20;color:${getLabelColor(l)};border-color:${getLabelColor(l)}40;">${escapeHtml(l)}</span>`;
+                });
+                labelHtml += '</span>';
+            }
+
+            // Planning state dot
+            let planningDot = '';
+            if (task.planning_state && task.planning_state !== 'unscheduled') {
+                const stateColors = {
+                    'scheduled': '#8b5cf6',
+                    'in_progress': '#10b981',
+                    'completed': '#6b7280',
+                    'blocked': '#ef4444',
+                };
+                planningDot = `<span class="planning-dot" style="background:${stateColors[task.planning_state] || '#6b7280'}" title="${task.planning_state.replace('_', ' ')}"></span>`;
+            }
+
+            // Blocker icon
+            let blockerIcon = '';
+            if (task.blocked_by && task.blocked_by.length) {
+                blockerIcon = `<span class="blocker-icon" title="Blocked by: ${task.blocked_by.join(', ')}">\u26D4</span>`;
+            }
+
+            // Notes badge
+            let notesBadge = '';
+            if (task.note_count > 0) {
+                notesBadge = `<span class="notes-badge" title="${task.note_count} note(s)">\uD83D\uDCC4 ${task.note_count}</span>`;
+            }
+
+            // Template badge
+            let templateBadge = '';
+            if (task.is_template) {
+                templateBadge = `<span class="template-badge">\uD83D\uDCCB Template</span>`;
+            }
+
             html += `
-                <li class="todo-item${task.overdue ? ' overdue-flag' : ''}">
-                    <span class="todo-title">${overdueBadge}${escapeHtml(task.title)}</span>
-                    ${dueHtml}
+                <li class="todo-item${task.overdue ? ' overdue-flag' : ''}" data-task-id="${task.id}" onclick="openTaskDetail('${task.id}')">
+                    <div class="todo-main">
+                        <div class="todo-title-row">
+                            ${planningDot}
+                            ${overdueBadge}
+                            <span class="todo-title">${escapeHtml(task.title)}</span>
+                            ${templateBadge}
+                        </div>
+                        <div class="todo-meta-row">
+                            ${labelHtml}
+                            ${blockerIcon}
+                            ${notesBadge}
+                        </div>
+                    </div>
+                    <div class="todo-actions">
+                        ${dueHtml}
+                    </div>
                 </li>
             `;
         });
-        
+
         html += `
                 </ul>
             </div>
         `;
     });
-    
+
     container.innerHTML = html;
+
+    // Inline reassign via assignee section click
+    document.querySelectorAll('.assignee-name').forEach(el => {
+        el.addEventListener('click', function() {
+            // Highlight, no inline reassign yet — detail panel covers it
+        });
+    });
 }
+
+// Task Detail Panel
+async function openTaskDetail(taskId) {
+    const overlay = document.getElementById('task-detail-overlay');
+    const body = document.getElementById('task-detail-body');
+    const title = document.getElementById('task-detail-title');
+    overlay.classList.remove('hidden');
+    title.textContent = 'Loading...';
+    body.innerHTML = '<div class="placeholder-loader">Loading task detail...</div>';
+
+    try {
+        const resp = await fetch('/dashboard/task/' + taskId);
+        if (!resp.ok) {
+            body.innerHTML = '<div class="placeholder-loader">Failed to load task detail.</div>';
+            return;
+        }
+        const data = await resp.json();
+        title.textContent = escapeHtml(data.title);
+
+        let html = '';
+        html += `<div class="detail-field"><span class="detail-label">Status</span><span class="detail-value">${escapeHtml(data.status)}</span></div>`;
+        html += `<div class="detail-field"><span class="detail-label">Assignee</span><span class="detail-value">${escapeHtml(data.assignee)}</span></div>`;
+        html += `<div class="detail-field"><span class="detail-label">Priority</span><span class="detail-value priority-${data.priority}">${escapeHtml(data.priority)}</span></div>`;
+        if (data.due_at) {
+            html += `<div class="detail-field"><span class="detail-label">Due</span><span class="detail-value">${new Date(data.due_at).toLocaleString()}</span></div>`;
+        }
+        if (data.planning_state) {
+            html += `<div class="detail-field"><span class="detail-label">Planning State</span><span class="detail-value">${escapeHtml(data.planning_state.replace('_', ' '))}</span></div>`;
+        }
+        if (data.labels && data.labels.length) {
+            const labelPills = data.labels.map(l =>
+                `<span class="task-label-pill" style="background:${getLabelColor(l)}20;color:${getLabelColor(l)};border-color:${getLabelColor(l)}40;">${escapeHtml(l)}</span>`
+            ).join(' ');
+            html += `<div class="detail-field"><span class="detail-label">Labels</span><span class="detail-value">${labelPills}</span></div>`;
+        }
+        if (data.is_template) {
+            html += `<div class="detail-field"><span class="detail-label">Template</span><span class="detail-value">\uD83D\uDCCB This task is a template</span></div>`;
+        }
+        if (data.template_title) {
+            html += `<div class="detail-field"><span class="detail-label">From Template</span><span class="detail-value template-source" onclick="openTaskDetail('${data.template_id}')">\uD83D\uDD17 ${escapeHtml(data.template_title)}</span></div>`;
+        }
+
+        // Blockers
+        if (data.blockers && data.blockers.length) {
+            html += `<div class="detail-field"><span class="detail-label">Blocked By</span><span class="detail-value blocker-list">`;
+            data.blockers.forEach(b => {
+                html += `<span class="blocker-item" onclick="openTaskDetail('${b.id}')">\u26D4 ${escapeHtml(b.title)}</span> `;
+            });
+            html += `</span></div>`;
+        }
+
+        // Dependents
+        if (data.dependents && data.dependents.length) {
+            html += `<div class="detail-field"><span class="detail-label">Blocks</span><span class="detail-value">`;
+            data.dependents.forEach(d => {
+                html += `<span class="blocker-item" onclick="openTaskDetail('${d.id}')">${escapeHtml(d.title)}</span> `;
+            });
+            html += `</span></div>`;
+        }
+
+        // Notes
+        html += `<div class="detail-notes-section"><h4 class="detail-section-title">Notes (${data.notes.length})</h4>`;
+        if (data.notes.length === 0) {
+            html += `<p class="detail-empty">No notes yet.</p>`;
+        } else {
+            html += `<div class="detail-notes-list">`;
+            data.notes.forEach(n => {
+                const author = n.author ? escapeHtml(n.author) : 'system';
+                const ts = n.created_at ? new Date(n.created_at).toLocaleString() : '';
+                html += `<div class="detail-note-item"><span class="detail-note-meta">${author} \u2014 ${ts}</span><div class="detail-note-content">${escapeHtml(n.content)}</div></div>`;
+            });
+            html += `</div>`;
+        }
+        html += `</div>`;
+
+        body.innerHTML = html;
+    } catch (err) {
+        body.innerHTML = '<div class="placeholder-loader">Error loading task detail.</div>';
+        console.error('Failed to load task detail:', err);
+    }
+}
+
+function closeTaskDetail() {
+    document.getElementById('task-detail-overlay').classList.add('hidden');
+}
+
+// Close task detail on overlay click
+document.getElementById('task-detail-overlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('task-detail-overlay')) {
+        closeTaskDetail();
+    }
+});
+document.getElementById('task-detail-close').addEventListener('click', closeTaskDetail);
 
 // Render Events
 function updateEvents(events) {

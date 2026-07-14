@@ -12,6 +12,12 @@ nova.local {
 	# (The dashboard files live in nova-core's /app/static, not in this
 	# Caddy container, so the file_server approach was broken.)
 	reverse_proxy nova-core:8080
+
+	# CardDAV/CalDAV — reverse proxy to Radicale so clients can use
+	# the same hostname (nova.local) and get TLS from Caddy.
+	handle_path /radicale/* {
+		reverse_proxy radicale:5232
+	}
 }
 
 # The WhatsApp webhook is proxied here and published externally via Cloudflare Tunnel,

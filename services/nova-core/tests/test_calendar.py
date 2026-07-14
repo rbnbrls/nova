@@ -12,7 +12,15 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from icalendar import Calendar as iCalendar
 
-from app.tools.calendar import _clear_calendar_cache, create_event, list_events
+from app.tools.calendar import (
+    _clear_calendar_cache,
+    create_event,
+    list_events,
+    find_free_slots,
+    edit_event,
+    delete_event,
+    reschedule_event,
+)
 
 TZ = ZoneInfo("Europe/Amsterdam")
 
@@ -325,3 +333,247 @@ async def test_create_event_invalid_rrule_still_saves():
         )
         assert "Created event" in result
         mock_calendar.save_event.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Plan 46-01: find_free_slots
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_find_free_slots_returns_slots():
+    """find_free_slots returns formatted free time slots."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_calendar.search.return_value = [
+        _make_mock_event(
+            "Morning meeting", datetime(2026, 7, 15, 9, 0, 0, tzinfo=TZ),
+            datetime(2026, 7, 15, 10, 0, 0, tzinfo=TZ),
+        ),
+        _make_mock_event(
+            "Lunch", datetime(2026, 7, 15, 12, 0, 0, tzinfo=TZ),
+            datetime(2026, 7, 15, 13, 0, 0, tzinfo=TZ),
+        ),
+    ]
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await find_free_slots("2026-07-15T00:00:00", "2026-07-15T23:59:59", duration_min=30)
+        assert "Free slots" in result
+        assert "08:00" in result or "10:00" in result or "13:00" in result
+        assert "Morning meeting" not in result
+
+
+@pytest.mark.asyncio
+async def test_find_free_slots_no_events_all_day_free():
+    """find_free_slots returns full day when no events exist."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_calendar.search.return_value = []
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await find_free_slots("2026-07-15T00:00:00", "2026-07-15T23:59:59", duration_min=60)
+        assert "Free slots" in result
+        assert "08:00" in result
+
+
+@pytest.mark.asyncio
+async def test_find_free_slots_duration_too_long():
+    """find_free_slots returns empty when no slot is long enough."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_calendar.search.return_value = [
+        _make_mock_event("All day", datetime(2026, 7, 15, 8, 0, 0, tzinfo=TZ),
+                         datetime(2026, 7, 15, 21, 0, 0, tzinfo=TZ)),
+    ]
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await find_free_slots("2026-07-15T00:00:00", "2026-07-15T23:59:59", duration_min=120)
+        assert "No free slots" in result
+
+
+@pytest.mark.asyncio
+async def test_find_free_slots_invalid_date():
+    """find_free_slots returns error for unparseable dates."""
+    mock_client, _mock_calendar = _make_caldav_mocks()
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await find_free_slots("bad date", "also bad")
+        assert "Error: Invalid date format" in result
+
+
+# ---------------------------------------------------------------------------
+# Plan 46-01: edit_event
+# ---------------------------------------------------------------------------
+
+
+def _make_editable_mock_event(
+    summary: str, dtstart: datetime, dtend: datetime,
+    location: str | None = None, uid: str = "evt-001",
+) -> MagicMock:
+    """Build a mock caldav Event that supports save()."""
+    mock_vevent = MagicMock()
+    mock_vevent.summary.value = summary
+    mock_vevent.dtstart.value = dtstart
+    mock_vevent.dtend.value = dtend
+    mock_vevent.location.value = location or ""
+    uid_attr = MagicMock()
+    uid_attr.value = uid
+    mock_vevent.uid = uid_attr
+
+    mock_vobject = MagicMock()
+    mock_vobject.vevent = mock_vevent
+
+    mock_event = MagicMock()
+    mock_event.vobject_instance = mock_vobject
+    mock_event.save = MagicMock()
+    return mock_event
+
+
+@pytest.mark.asyncio
+async def test_edit_event_title():
+    """edit_event changes the title of a matching event."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_event = _make_editable_mock_event(
+        "Old Title", datetime(2026, 7, 15, 10, 0, 0, tzinfo=TZ),
+        datetime(2026, 7, 15, 11, 0, 0, tzinfo=TZ),
+    )
+    mock_calendar.search.return_value = [mock_event]
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await edit_event("Old Title", "2026-07-15T00:00:00", "2026-07-16T00:00:00", new_title="New Title")
+        assert "Updated event" in result
+        assert "title" in result
+        assert mock_event.save.called
+
+
+@pytest.mark.asyncio
+async def test_edit_event_not_found():
+    """edit_event returns error when no event matches."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_calendar.search.return_value = []
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await edit_event("Nonexistent", "2026-07-15T00:00:00", "2026-07-16T00:00:00", new_title="Whatever")
+        assert "No event found" in result
+
+
+@pytest.mark.asyncio
+async def test_edit_event_conflict_detected():
+    """edit_event blocks when new time conflicts with another event."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    target_event = _make_editable_mock_event(
+        "My Event", datetime(2026, 7, 15, 10, 0, 0, tzinfo=TZ),
+        datetime(2026, 7, 15, 11, 0, 0, tzinfo=TZ), uid="evt-001",
+    )
+    conflict_event = _make_editable_mock_event(
+        "Existing", datetime(2026, 7, 15, 14, 0, 0, tzinfo=TZ),
+        datetime(2026, 7, 15, 15, 0, 0, tzinfo=TZ), uid="evt-002",
+    )
+    # search called for both _find_event_by_title and detect_conflicts
+    mock_calendar.search.side_effect = [
+        [target_event],  # _find_event_by_title
+        [target_event, conflict_event],  # detect_conflicts
+    ]
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await edit_event(
+            "My Event", "2026-07-15T00:00:00", "2026-07-16T00:00:00",
+            new_start="2026-07-15T14:00:00", new_end="2026-07-15T15:00:00",
+        )
+        assert "conflicts" in result or "NOT updated" in result
+        assert "Existing" in result
+
+
+@pytest.mark.asyncio
+async def test_edit_event_no_changes():
+    """edit_event returns early when no fields to change."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_event = _make_editable_mock_event(
+        "Static", datetime(2026, 7, 15, 10, 0, 0, tzinfo=TZ),
+        datetime(2026, 7, 15, 11, 0, 0, tzinfo=TZ),
+    )
+    mock_calendar.search.return_value = [mock_event]
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await edit_event("Static", "2026-07-15T00:00:00", "2026-07-16T00:00:00")
+        assert "No changes" in result
+
+
+# ---------------------------------------------------------------------------
+# Plan 46-01: delete_event
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_event_found():
+    """delete_event removes a matching event."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_event = _make_editable_mock_event(
+        "Delete Me", datetime(2026, 7, 15, 10, 0, 0, tzinfo=TZ),
+        datetime(2026, 7, 15, 11, 0, 0, tzinfo=TZ),
+    )
+    mock_event.delete = MagicMock()
+    mock_calendar.search.return_value = [mock_event]
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await delete_event("Delete Me", "2026-07-15T00:00:00", "2026-07-16T00:00:00")
+        assert "Deleted event" in result
+        assert mock_event.delete.called
+
+
+@pytest.mark.asyncio
+async def test_delete_event_not_found():
+    """delete_event returns error when no event matches."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_calendar.search.return_value = []
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await delete_event("Nonexistent", "2026-07-15T00:00:00", "2026-07-16T00:00:00")
+        assert "No event found" in result
+
+
+# ---------------------------------------------------------------------------
+# Plan 46-01: reschedule_event
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reschedule_event_non_recurring():
+    """reschedule_event deletes old and creates rescheduled event."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    mock_event = _make_editable_mock_event(
+        "Move Me", datetime(2026, 7, 15, 10, 0, 0, tzinfo=TZ),
+        datetime(2026, 7, 15, 11, 0, 0, tzinfo=TZ), uid="evt-move",
+    )
+    mock_event.delete = MagicMock()
+    mock_calendar.search.return_value = [mock_event]
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await reschedule_event(
+            "Move Me", "2026-07-15T00:00:00", "2026-07-16T00:00:00",
+            "2026-07-16T14:00:00", "2026-07-16T15:00:00",
+        )
+        assert "Rescheduled" in result
+        assert mock_event.delete.called
+        assert mock_calendar.save_event.called
+
+
+@pytest.mark.asyncio
+async def test_reschedule_event_conflict():
+    """reschedule_event blocks on conflict."""
+    mock_client, mock_calendar = _make_caldav_mocks()
+    target_event = _make_editable_mock_event(
+        "Move Me", datetime(2026, 7, 15, 10, 0, 0, tzinfo=TZ),
+        datetime(2026, 7, 15, 11, 0, 0, tzinfo=TZ), uid="evt-move",
+    )
+    conflicting = _make_editable_mock_event(
+        "Existing", datetime(2026, 7, 15, 14, 0, 0, tzinfo=TZ),
+        datetime(2026, 7, 15, 15, 0, 0, tzinfo=TZ), uid="evt-other",
+    )
+    mock_calendar.search.side_effect = [
+        [target_event],
+        [target_event, conflicting],
+    ]
+
+    with patch("app.tools.calendar.caldav.DAVClient", return_value=mock_client):
+        result = await reschedule_event(
+            "Move Me", "2026-07-15T00:00:00", "2026-07-16T00:00:00",
+            "2026-07-15T14:00:00", "2026-07-15T15:00:00",
+        )
+        assert "conflicts" in result or "NOT rescheduled" in result

@@ -41,9 +41,10 @@ from caldav.lib.error import AuthorizationError
 from .tools.email import _get_imap_connection
 from .tools.home_assistant import _ha_get
 from .voice_rooms import RoomSessionManager
+from .contacts_sync import sync_all_contacts as _carddav_sync_all
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, run_briefing_scheduler, process_queued_notifications, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
+from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, check_at_risk_tasks, run_briefing_scheduler, process_queued_notifications, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
 
 log = logging.getLogger("nova-core")
 
@@ -74,7 +75,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails")
     scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler")
     scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications")
-    scheduler.add_job(check_overdue_tasks, "interval", hours=1, id="check_overdue_tasks")
+    scheduler.add_job(check_at_risk_tasks, "interval", hours=1, id="check_at_risk_tasks")
 
     # Voice room session cleanup every 5 minutes
     if voice_room_manager is not None:
@@ -101,6 +102,10 @@ async def lifespan(app: FastAPI):
             run_maintenance_trend_report, "cron", day_of_week="sun", hour=5, minute=0,
             id="run_maintenance_trend_report"
         )
+
+    # CardDAV startup sync + 15-min scheduled sync (Phase 47)
+    asyncio.create_task(_carddav_startup_sync())
+    scheduler.add_job(_carddav_startup_sync, "interval", minutes=15, id="carddav_sync", replace_existing=True)
 
     scheduler.start()
 
@@ -131,6 +136,14 @@ async def lifespan(app: FastAPI):
     # Shutdown scheduler and close database pool
     scheduler.shutdown()
     await db.close_pool()
+
+
+async def _carddav_startup_sync() -> None:
+    try:
+        result = await _carddav_sync_all()
+        log.info("CardDAV startup sync complete: %s", result)
+    except Exception as exc:
+        log.warning("CardDAV startup sync failed (non-fatal): %s", exc)
 
 
 app = FastAPI(title="Nova Core", version="0.1.0", lifespan=lifespan)
@@ -202,21 +215,58 @@ async def dashboard_tasks() -> dict:
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT t.title, t.due_at, u.name as assignee
+            SELECT t.id, t.title, t.due_at, t.priority, t.planning_state,
+                   t.labels, t.is_template, t.template_id, t.created_at,
+                   u.name as assignee
             FROM tasks t
             LEFT JOIN users u ON t.assignee_id = u.id
             WHERE t.status = 'active'
             ORDER BY t.due_at ASC NULLS LAST, t.created_at ASC
             """
         )
+
+    task_ids = [str(r["id"]) for r in rows]
+    note_counts: dict[str, int] = {}
+    blocker_titles: dict[str, list[str]] = {}
+    if task_ids:
+        note_rows = await conn.fetch(
+            "SELECT task_id, COUNT(*) as cnt FROM task_notes WHERE task_id = ANY($1::uuid[]) GROUP BY task_id",
+            task_ids,
+        )
+        for nr in note_rows:
+            note_counts[str(nr["task_id"])] = nr["cnt"]
+
+        dep_rows = await conn.fetch(
+            """
+            SELECT td.child_id, t.title as blocker_title
+            FROM task_dependencies td
+            JOIN tasks t ON t.id = td.parent_id
+            WHERE td.child_id = ANY($1::uuid[])
+            """,
+            task_ids,
+        )
+        for dr in dep_rows:
+            cid = str(dr["child_id"])
+            blocker_titles.setdefault(cid, []).append(dr["blocker_title"])
+
     tasks = []
+    now_utc = datetime.now(timezone.utc)
     for r in rows:
+        tid = str(r["id"])
         due_iso = r["due_at"].isoformat() if r["due_at"] else None
         tasks.append({
+            "id": tid,
             "title": r["title"],
             "due_at": due_iso,
+            "priority": r["priority"] or "medium",
             "assignee": r["assignee"] or "unassigned",
-            "overdue": r["due_at"] is not None and r["due_at"] < datetime.now(timezone.utc) - timedelta(hours=48)
+            "labels": r["labels"] or [],
+            "is_template": r["is_template"] or False,
+            "template_id": str(r["template_id"]) if r["template_id"] else None,
+            "planning_state": r["planning_state"],
+            "note_count": note_counts.get(tid, 0),
+            "blocked_by": blocker_titles.get(tid, []),
+            "overdue": r["due_at"] is not None and r["due_at"] < now_utc - timedelta(hours=48),
         })
     return {"tasks": tasks}
 
@@ -245,11 +295,16 @@ async def dashboard_events() -> dict:
         dtstart = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
         dtend = vevent.dtend.value if hasattr(vevent, "dtend") else None
         location = vevent.location.value if hasattr(vevent, "location") and vevent.location.value else ""
+        rrule_raw = vevent.rrule.value if hasattr(vevent, "rrule") else None
+        rrule_str = str(rrule_raw) if rrule_raw else None
+        uid = str(vevent.uid.value) if hasattr(vevent, "uid") else ""
         events_list.append({
             "title": summary,
             "start": dtstart.isoformat() if dtstart else "",
             "end": dtend.isoformat() if dtend else "",
-            "location": location
+            "location": location,
+            "rrule": rrule_str,
+            "uid": uid,
         })
     return {"events": events_list}
 
@@ -287,6 +342,144 @@ async def dashboard_redirect():
     return RedirectResponse(url="/static/index.html")
 
 
+@app.get("/dashboard/availability")
+async def dashboard_availability(days: int = 7):
+    """Return day-by-day availability summary for the next N days (working hours 08:00-22:00)."""
+    from datetime import date
+    from .planning import WORK_DAY_START as _WS, WORK_DAY_END as _WE, _merge_slots, TimeSlot
+
+    tz = zoneinfo.ZoneInfo(settings.nova_timezone)
+    today = date.today()
+    start_date = today
+    end_date = today + timedelta(days=days)
+
+    try:
+        cal = await asyncio.to_thread(_get_calendar)
+        start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=tz)
+        end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=tz)
+        events = await asyncio.to_thread(cal.search, start=start_dt, end=end_dt, event=True, expand=True)
+    except Exception as e:
+        log.warning("Failed to fetch calendar for availability: %s", e)
+        return {"availability": []}
+
+    occupied: list[TimeSlot] = []
+    for ev in events:
+        try:
+            vevent = ev.vobject_instance.vevent
+            ds = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
+            de = vevent.dtend.value if hasattr(vevent, "dtend") else None
+            if ds and de and isinstance(ds, datetime) and isinstance(de, datetime):
+                occupied.append(TimeSlot(start=ds, end=de))
+        except Exception:
+            continue
+
+    merged = _merge_slots(occupied)
+    work_min = int((_WE - _WS) * 60)
+
+    availability = []
+    current = start_date
+    while current <= end_date:
+        day_start = datetime.combine(current, datetime.min.time(), tzinfo=tz).replace(hour=_WS)
+        day_end = datetime.combine(current, datetime.min.time(), tzinfo=tz).replace(hour=_WE)
+        occ_min = 0
+        for o in merged:
+            if o.end <= day_start or o.start >= day_end:
+                continue
+            o_start = max(o.start, day_start)
+            o_end = min(o.end, day_end)
+            occ_min += (o_end - o_start).total_seconds() / 60
+        free_min = max(0, work_min - occ_min)
+        pct = round((free_min / work_min) * 100, 1) if work_min > 0 else 0
+        availability.append({
+            "date": current.isoformat(),
+            "free_minutes": int(free_min),
+            "occupied_minutes": int(occ_min),
+            "free_percent": pct,
+        })
+        current += timedelta(days=1)
+
+    return {"availability": availability}
+
+
+@app.get("/dashboard/find-slot")
+async def dashboard_find_slot(duration_min: int = 30, days: int = 7):
+    """Find available time slots for a given duration in the next N days."""
+    from datetime import date
+    from .planning import WORK_DAY_START as _WS, WORK_DAY_END as _WE, _merge_slots, TimeSlot
+
+    tz = zoneinfo.ZoneInfo(settings.nova_timezone)
+    today = date.today()
+    start_date = today
+    end_date = today + timedelta(days=days)
+
+    try:
+        cal = await asyncio.to_thread(_get_calendar)
+        start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=tz)
+        end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=tz)
+        events = await asyncio.to_thread(cal.search, start=start_dt, end=end_dt, event=True, expand=True)
+    except Exception as e:
+        log.warning("Failed to fetch calendar for find-slot: %s", e)
+        return {"slots": []}
+
+    occupied: list[TimeSlot] = []
+    for ev in events:
+        try:
+            vevent = ev.vobject_instance.vevent
+            ds = vevent.dtstart.value if hasattr(vevent, "dtstart") else None
+            de = vevent.dtend.value if hasattr(vevent, "dtend") else None
+            if ds and de and isinstance(ds, datetime) and isinstance(de, datetime):
+                occupied.append(TimeSlot(start=ds, end=de))
+        except Exception:
+            continue
+
+    merged = _merge_slots(occupied)
+
+    slots = []
+    current = start_date
+    while current <= end_date:
+        day_start = datetime.combine(current, datetime.min.time(), tzinfo=tz).replace(hour=_WS)
+        day_end = datetime.combine(current, datetime.min.time(), tzinfo=tz).replace(hour=_WE)
+        cursor = day_start
+        for o in merged:
+            if o.end <= cursor or o.start >= day_end:
+                continue
+            if o.start > cursor:
+                gap_end = min(o.start, day_end)
+                gap_min = (gap_end - cursor).total_seconds() / 60
+                if gap_min >= duration_min:
+                    slots.append({
+                        "date": current.isoformat(),
+                        "start": cursor.strftime("%H:%M"),
+                        "end": gap_end.strftime("%H:%M"),
+                        "duration_min": int(gap_min),
+                    })
+            cursor = max(cursor, o.end)
+            if cursor >= day_end:
+                break
+        if cursor < day_end:
+            gap_min = (day_end - cursor).total_seconds() / 60
+            if gap_min >= duration_min:
+                slots.append({
+                    "date": current.isoformat(),
+                    "start": cursor.strftime("%H:%M"),
+                    "end": day_end.strftime("%H:%M"),
+                    "duration_min": int(gap_min),
+                })
+        current += timedelta(days=1)
+
+    return {"slots": slots}
+
+
+@app.get("/dashboard/plan/{user}")
+async def dashboard_plan(user: str, start: str | None = None, end: str | None = None, regenerate: bool = False):
+    """Return a time-blocked plan for *user* as JSON."""
+    from .planning import generate_plan as planner_generate
+    start_date = datetime.fromisoformat(start).date() if start else date.today()
+    end_date = datetime.fromisoformat(end).date() if end else start_date
+    blocks = await planner_generate(user, start_date, end_date, regenerate)
+    return {"blocks": [b.__dict__ for b in blocks]}
+
+
 @app.get("/dashboard/stream")
 async def dashboard_stream():
     import asyncio
@@ -298,11 +491,44 @@ async def dashboard_stream():
                 tasks_data = await dashboard_tasks()
                 events_data = await dashboard_events()
                 audit_data = await dashboard_audit(limit=50)
+                availability_data = await dashboard_availability(days=7)
                 payload = {
                     "tasks": tasks_data["tasks"],
                     "events": events_data["events"],
                     "audit": audit_data["audit"],
+                    "availability": availability_data["availability"],
                 }
+                try:
+                    from .planning import load_blocks
+                    from datetime import date, timedelta
+                    pool = await db.get_pool()
+                    planned_rows = await load_blocks(pool, "household", date.today(), date.today() + timedelta(days=7))
+                    payload["plan"] = [
+                        {
+                            "title": b.title,
+                            "start": b.start_time.isoformat() if b.start_time else "",
+                            "end": b.end_time.isoformat() if b.end_time else "",
+                            "task_id": str(b.task_id) if b.task_id else None,
+                        }
+                        for b in planned_rows
+                    ]
+                except Exception:
+                    payload["plan"] = []
+
+                try:
+                    from .replanning import get_at_risk_tasks as _get_at_risk, compute_next_best_action as _compute_nba
+                    risk_by_user = {}
+                    for u in ("Ruben", "Meral"):
+                        tasks = await _get_at_risk(u, lookahead_days=7)
+                        if tasks:
+                            risk_by_user[u] = tasks[:5]
+                    payload["at_risk"] = risk_by_user
+                    house_next = await _compute_nba("household")
+                    payload["next_action"] = house_next
+                except Exception:
+                    payload["at_risk"] = {}
+                    payload["next_action"] = {"has_next_action": False}
+
                 yield f"data: {json.dumps(payload)}\n\n"
             except Exception as e:
                 log.warning("SSE generator error: %s", e)
@@ -592,6 +818,99 @@ async def _collect_channel_status() -> dict:
             },
         }
     return channels
+
+
+@app.get("/dashboard/task/{task_id}")
+async def dashboard_task_detail(task_id: str) -> dict:
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT t.id, t.title, t.due_at, t.priority, t.status,
+                   t.planning_state, t.labels, t.is_template, t.template_id,
+                   t.task_duration_min, t.earliest_start, t.latest_end,
+                   t.hard_deadline, t.soft_deadline, t.created_at,
+                   u_assign.name as assignee, u_creator.name as created_by
+            FROM tasks t
+            LEFT JOIN users u_assign ON t.assignee_id = u_assign.id
+            LEFT JOIN users u_creator ON t.created_by = u_creator.id
+            WHERE t.id = $1::uuid
+            """,
+            task_id,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        notes = await conn.fetch(
+            """
+            SELECT tn.id, tn.content, tn.created_at, u.name as author
+            FROM task_notes tn
+            LEFT JOIN users u ON tn.author_id = u.id
+            WHERE tn.task_id = $1::uuid
+            ORDER BY tn.created_at ASC
+            """,
+            task_id,
+        )
+
+        blockers = await conn.fetch(
+            """
+            SELECT t.id, t.title FROM task_dependencies td
+            JOIN tasks t ON t.id = td.parent_id
+            WHERE td.child_id = $1::uuid AND t.status = 'active'
+            """,
+            task_id,
+        )
+
+        dependents = await conn.fetch(
+            """
+            SELECT t.id, t.title FROM task_dependencies td
+            JOIN tasks t ON t.id = td.child_id
+            WHERE td.parent_id = $1::uuid AND t.status = 'active'
+            """,
+            task_id,
+        )
+
+        template_name = None
+        if row["template_id"]:
+            trow = await conn.fetchval(
+                "SELECT title FROM tasks WHERE id = $1::uuid",
+                row["template_id"],
+            )
+            if trow:
+                template_name = trow
+
+    due_iso = row["due_at"].isoformat() if row["due_at"] else None
+    return {
+        "id": str(row["id"]),
+        "title": row["title"],
+        "due_at": due_iso,
+        "priority": row["priority"] or "medium",
+        "status": row["status"],
+        "assignee": row["assignee"] or "unassigned",
+        "created_by": row["created_by"] or "",
+        "labels": row["labels"] or [],
+        "is_template": row["is_template"] or False,
+        "template_id": str(row["template_id"]) if row["template_id"] else None,
+        "template_title": template_name,
+        "planning_state": row["planning_state"],
+        "task_duration_min": row["task_duration_min"],
+        "earliest_start": row["earliest_start"].isoformat() if row["earliest_start"] else None,
+        "latest_end": row["latest_end"].isoformat() if row["latest_end"] else None,
+        "hard_deadline": row["hard_deadline"].isoformat() if row["hard_deadline"] else None,
+        "soft_deadline": row["soft_deadline"].isoformat() if row["soft_deadline"] else None,
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        "notes": [
+            {
+                "id": str(n["id"]),
+                "content": n["content"],
+                "author": n["author"] or "",
+                "created_at": n["created_at"].isoformat() if n["created_at"] else None,
+            }
+            for n in notes
+        ],
+        "blockers": [{"id": str(b["id"]), "title": b["title"]} for b in blockers],
+        "dependents": [{"id": str(d["id"]), "title": d["title"]} for d in dependents],
+    }
 
 
 @app.get("/admin")

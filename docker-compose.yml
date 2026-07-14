@@ -128,6 +128,16 @@ services:
       - "5232:5232"
     volumes:
       - ./data/radicale:/data
+      - ./infra/radicale:/config:ro
+    environment:
+      - CALDAV_USERNAME=${CALDAV_USERNAME}
+      - CALDAV_PASSWORD=${CALDAV_PASSWORD}
+      - CALDAV_HTPASSWD_PATH=/data/users.htpasswd
+    command: >
+      sh -c '
+      /venv/bin/python3 /config/gen_users.py &&
+      exec /venv/bin/radicale --config /config/config
+      '
     restart: unless-stopped
     networks:
       - nova-net

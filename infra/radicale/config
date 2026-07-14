@@ -1,0 +1,21 @@
+[server]
+hosts = 0.0.0.0:5232
+realm = Nova Household
+
+[auth]
+type = htpasswd
+htpasswd_filename = /data/users.htpasswd
+htpasswd_encryption = bcrypt
+
+[storage]
+type = filesystem
+filesystem_folder = /data/collections
+
+[rights]
+type = owner_only
+
+[logging]
+level = info
+
+[web]
+type = none

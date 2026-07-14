@@ -991,6 +991,361 @@ body {
     border-radius: 2px;
 }
 
+/* --- Phase 45: Task Intelligence --- */
+
+/* Label Filter Bar */
+.label-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.25rem 0;
+}
+
+.label-filter-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.label-filter-dynamic {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.label-filter-pill {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.label-filter-pill:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.label-filter-pill.active {
+    color: #fff;
+    font-weight: 600;
+}
+
+/* Task Label Pills */
+.task-label-pills {
+    display: inline-flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.task-label-pill {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    border: 1px solid;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* Planning State Dot */
+.planning-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.4rem;
+    flex-shrink: 0;
+    box-shadow: 0 0 4px currentColor;
+}
+
+/* Blocker Icon */
+.blocker-icon {
+    font-size: 0.85rem;
+    margin-left: 0.25rem;
+    opacity: 0.8;
+    cursor: help;
+}
+
+/* Notes Badge */
+.notes-badge {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    background: rgba(139, 92, 246, 0.15);
+    color: var(--accent-light);
+    margin-left: 0.3rem;
+    white-space: nowrap;
+}
+
+/* Template Badge */
+.template-badge {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    margin-left: 0.4rem;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+/* Enhanced Task Item layout */
+.todo-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.todo-title-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.todo-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+}
+
+.todo-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.todo-item {
+    cursor: pointer;
+}
+
+.todo-item:hover {
+    background: rgba(139, 92, 246, 0.05);
+}
+
+/* Inline Reassign Button */
+.inline-reassign-btn {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+    margin-left: 0.5rem;
+}
+
+.inline-reassign-btn:hover {
+    color: var(--accent-light);
+    border-color: var(--accent-color);
+}
+
+/* Task Detail Overlay / Slide-out Panel */
+.task-detail-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 900;
+    display: flex;
+    justify-content: flex-end;
+    animation: fadeIn 0.2s ease;
+    backdrop-filter: blur(2px);
+}
+
+.task-detail-overlay.hidden {
+    display: none !important;
+}
+
+.task-detail-panel {
+    width: 480px;
+    max-width: 90vw;
+    max-height: 100vh;
+    overflow-y: auto;
+    background: var(--panel-bg);
+    backdrop-filter: blur(16px);
+    border-left: 1px solid var(--border-color);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
+    padding: 1.5rem;
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+.task-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.task-detail-header h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+    line-height: 1.4;
+}
+
+.task-detail-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.task-detail-close:hover {
+    color: var(--text-primary);
+}
+
+.task-detail-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.detail-field {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    gap: 1rem;
+}
+
+.detail-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+    min-width: 100px;
+}
+
+.detail-value {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    text-align: right;
+    word-break: break-word;
+}
+
+.detail-value.priority-high {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+.detail-value.priority-low {
+    color: var(--text-secondary);
+}
+
+/* Template source navigation */
+.template-source {
+    color: var(--accent-light);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+}
+
+.template-source:hover {
+    color: var(--accent-color);
+}
+
+/* Blocker list in detail */
+.blocker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    align-items: flex-end;
+}
+
+.blocker-item {
+    cursor: pointer;
+    color: var(--accent-light);
+    font-size: 0.85rem;
+    transition: color 0.2s;
+}
+
+.blocker-item:hover {
+    color: var(--accent-color);
+    text-decoration: underline;
+}
+
+/* Detail notes section */
+.detail-notes-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.detail-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+.detail-empty {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.detail-notes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.detail-note-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 0.6rem 0.8rem;
+}
+
+.detail-note-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.3rem;
+    display: block;
+}
+
+.detail-note-content {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+/* Priority dot on detail panel */
+.detail-value .priority-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.3rem;
+}
+
+/* --- End Phase 45 --- */
+
 /* Phase 40 — Admin panel styles (append-only block, do not modify above) */
 .admin-service-grid {
     display: grid;

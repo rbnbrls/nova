@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     caldav_username: str = ""
     caldav_password: str = ""
 
+    @property
+    def carddav_base_url(self) -> str:
+        """Radicale CardDAV endpoint for contact sync."""
+        return self.caldav_url.rstrip("/")
+
     # Home Assistant
     nova_ha_token: str = ""
     nova_ha_url: str = "http://homeassistant:8123"

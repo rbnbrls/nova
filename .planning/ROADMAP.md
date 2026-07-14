@@ -178,19 +178,25 @@ Plans:
 
 **Requirements**: HOUSEHOLD-PLAN-09, HOUSEHOLD-PLAN-10, HOUSEHOLD-PLAN-11
 **Depends on:** Phase 44
-**Plans:** 1/1 plans complete
+**Plans:** 2 plans
 
 Plans:
 
-**Wave 1**
+**Wave 0**
 
-- [ ] 45-01-PLAN.md — Extend task tools/UI for labels, filters, dependencies, recurring templates, notes/comments, and "assign/share with household member" workflows; update `app/tools/tasks.py`, `app/tools/chores.py`, `app/tools/relay.py`, dashboard activity views, and add tests for label filtering, dependency display, and recurring task behavior
+- [ ] 45-01-PLAN.md — Backend: migration 0015 (task_notes, is_template), task_notes module, task intelligence tools (rename/reassign/detail/template/label-filter), dashboard task detail API, SSE payload enrichment, and tests
+
+**Wave 1** *(blocked on Wave 0)*
+
+- [ ] 45-02-PLAN.md — Frontend: enhanced dashboard task cards with label pills/blocker icons/notes badges/template indicators, slide-out task detail panel with notes thread/reassign/label filter, quick inline reassign, activity feed enrichment, and template management UI
 
 **Acceptance criteria**
 
 - Tasks can be organized by label, blocker, and template.
-- Recurring tasks and chores remain first-class and visible in planning.
-- The household can add context to a task without losing it in chat.
+- The household can add notes, rename tasks, and reassign tasks from chat or the dashboard.
+- Task templates can generate new instances preserving planning metadata.
+- The dashboard shows labels, blockers, notes count, and template badges on every task card.
+- A label filter bar and task detail panel make the task list interactive and scannable.
 
 ### Phase 46: calendar intelligence and meeting assistance
 
@@ -198,13 +204,17 @@ Plans:
 
 **Requirements**: HOUSEHOLD-PLAN-12, HOUSEHOLD-PLAN-13, HOUSEHOLD-PLAN-14
 **Depends on:** Phase 45
-**Plans:** 1/1 plans complete
+**Plans:** 2 plans
 
 Plans:
 
-**Wave 1**
+**Wave 0**
 
-- [ ] 46-01-PLAN.md — Expand `app/tools/calendar.py`, `app/main.py`, and related scheduler code with free/busy APIs, "find a slot" helpers, smarter recurring-event handling, and reschedule-aware conflict checks; add tests for meeting placement, recurrence editing, and conflict-aware replanning
+- [ ] 46-01-PLAN.md — Calendar intelligence tools: find_free_slots, edit_event, delete_event, reschedule_event, recurring-event awareness, and replan integration for all mutations
+
+**Wave 1** *(blocked on Wave 0)*
+
+- [ ] 46-02-PLAN.md — Free/busy and find-slot API endpoints, SSE stream enrichment with availability summaries, dashboard event recurrence display, and replan trigger integration tests
 
 **Acceptance criteria**
 
@@ -224,7 +234,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 47-01-PLAN.md — Standards/interoperability layer: harden the Radicale CalDAV server configuration, add CardDAV exposure for household contacts, document and test client profiles for Nextcloud and Outlook-compatible setups, and add smoke tests or scripted verification for calendar/contact sync access paths
+- [ ] 47-01-PLAN.md — Hardened Radicale CalDAV config (htpasswd/bcrypt auth, owner-only rights), CardDAV sync bridge from PostgreSQL contacts table to Radicale VCard storage, Caddy TLS proxy for CardDAV, LLM-callable contact tools (add/list/delete), client profiles doc (Nextcloud/Apple/Thunderbird), and smoke tests for VCF formatting and sync operations
 
 **Acceptance criteria**
 

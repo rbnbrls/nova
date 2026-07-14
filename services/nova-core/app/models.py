@@ -121,4 +121,111 @@ class ModelDeleteRequest(BaseModel):
     model: str
 
 
+# ---------------------------------------------------------------------------
+# Phase 42 — Contact management request/response schemas
+# ---------------------------------------------------------------------------
+
+from uuid import UUID as _UUID
+from datetime import datetime as _datetime
+from pydantic import BaseModel as _BaseModel, Field as _Field
+
+
+class ContactCreateRequest(_BaseModel):
+    name: str
+    notes: str | None = None
+
+
+class ContactUpdateRequest(_BaseModel):
+    name: str | None = None
+    notes: str | None = None
+
+
+class ContactEmailCreateRequest(_BaseModel):
+    email: str
+    type: str | None = None
+
+
+class ContactPhoneCreateRequest(_BaseModel):
+    phone: str
+    type: str | None = None
+
+
+class ContactAddressCreateRequest(_BaseModel):
+    address: str
+    type: str | None = None
+
+
+class ContactEmailResponse(_BaseModel):
+    id: str
+    contact_id: str
+    email: str
+    type: str | None = None
+
+
+class ContactPhoneResponse(_BaseModel):
+    id: str
+    contact_id: str
+    phone: str
+    type: str | None = None
+
+
+class ContactAddressResponse(_BaseModel):
+    id: str
+    contact_id: str
+    address: str
+    type: str | None = None
+
+
+class ContactResponse(_BaseModel):
+    id: str
+    name: str
+    notes: str | None = None
+    created_at: _datetime | None = None
+    updated_at: _datetime | None = None
+    emails: list[ContactEmailResponse] = _Field(default_factory=list)
+    phones: list[ContactPhoneResponse] = _Field(default_factory=list)
+    addresses: list[ContactAddressResponse] = _Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Phase 43 — Planning (deterministic auto-scheduler) request/response schemas
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel as _PBaseModel, Field as _PField
+
+
+class PlannedBlockCreate(_PBaseModel):
+    task_id: str | None = None
+    title: str
+    planned_date: str  # ISO date, e.g. 2026-07-15
+    start_time: str    # ISO datetime, e.g. 2026-07-15T09:00:00+02:00
+    end_time: str      # ISO datetime
+    is_occupied: bool = False
+    source_event_uid: str | None = None
+
+
+class PlannedBlockResponse(_PBaseModel):
+    id: str
+    task_id: str | None = None
+    title: str
+    planned_date: str
+    start_time: str
+    end_time: str
+    is_occupied: bool = False
+    source_event_uid: str | None = None
+    created_at: str
+
+
+class PlanRequest(_PBaseModel):
+    user: str
+    start_date: str  # ISO date
+    end_date: str    # ISO date
+    regenerate: bool = False
+
+
+class PlanResponse(_PBaseModel):
+    blocks: list[PlannedBlockResponse]
+    generated_at: str
+
+
 
