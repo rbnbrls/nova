@@ -444,8 +444,11 @@ async def _check_caldav() -> dict:
             "detail": f"Check CalDAV server at {host} — Unauthorized — check CalDAV credentials or server auth config",
             "host": host,
         }
+    except asyncio.CancelledError:
+        log.warning("admin _check_caldav cancelled (timeout)")
+        return {"status": "down", "detail": f"CalDAV check timed out at {host}", "host": host}
     except Exception as exc:
-        log.warning("admin _check_caldav failed: %s", exc)
+        log.warning("admin _check_caldav failed: %s [%s]", type(exc).__name__, exc)
         hint = str(exc).split(":")[-1].strip()[:80] if str(exc) else ""
         detail = f"Check CalDAV server at {host}"
         if hint:
