@@ -232,8 +232,8 @@ async def dashboard_events() -> dict:
     end_dt = start_dt + timedelta(days=7)
     
     try:
-        calendar = _get_calendar()
-        events = calendar.search(start=start_dt, end=end_dt, event=True, expand=True)
+        calendar = await asyncio.to_thread(_get_calendar)
+        events = await asyncio.to_thread(calendar.search, start=start_dt, end=end_dt, event=True, expand=True)
     except Exception as e:
         log.warning("Failed to fetch calendar for dashboard: %s", e)
         return {"events": []}
@@ -426,16 +426,16 @@ async def _check_postgres() -> dict:
 
 
 async def _check_caldav() -> dict:
-    """CalDAV health check — reuses sync _get_calendar() wrapped in try/except.
+    """CalDAV health check — runs sync _get_calendar() in a thread pool.
 
-    Note: _get_calendar() is synchronous and will block the event loop while
-    connecting. The asyncio.wait_for(timeout=5) in _collect_admin_status
-    provides an outer safety net so a hung call is eventually discarded
-    (though it cannot cancel an already-blocking synchronous operation).
+    Wraps the synchronous CalDAV call in asyncio.to_thread so it does not
+    block the event loop.  The asyncio.wait_for(timeout=5) in
+    _collect_admin_status can then properly cancel the task if Radicale
+    is unreachable or slow to respond.
     """
     host = _host_only(settings.caldav_url)
     try:
-        _get_calendar()
+        await asyncio.to_thread(_get_calendar)
         return {"status": "ok", "detail": "Calendar URL reachable", "host": host}
     except AuthorizationError:
         log.warning("admin _check_caldav auth failed")
