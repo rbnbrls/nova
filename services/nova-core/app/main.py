@@ -37,6 +37,7 @@ from .channels.telegram import process_incoming_telegram, _handle_telegram_comma
 from .channels.webhook_router import register_all_webhooks
 from .db import get_pool as db_get_pool
 from .tools.calendar import _get_calendar
+from caldav.lib.error import AuthorizationError
 from .tools.email import _get_imap_connection
 from .tools.home_assistant import _ha_get
 from .voice_rooms import RoomSessionManager
