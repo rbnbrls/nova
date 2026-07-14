@@ -52,6 +52,24 @@ scheduler = AsyncIOScheduler()
 
 voice_room_manager: RoomSessionManager | None = None
 
+
+def _handle_task_exception(task: asyncio.Task) -> None:
+    """Log any unhandled exception from a background asyncio task.
+    
+    Without this callback, an exception in an asyncio.create_task() would
+    be silently swallowed until garbage-collected, at which point Python
+    logs "Task exception was never retrieved". This callback surfaces the
+    error immediately at WARNING level (D-02: never crash from a background
+    task failure).
+    """
+    try:
+        exc = task.exception()
+        if exc is not None:
+            log.warning("Background task %s raised: %s: %s",
+                        task.get_name(), type(exc).__name__, exc)
+    except asyncio.CancelledError:
+        pass  # Task was cancelled — not an error.
+
 # WhoAmI intent detection: matches "I'm Ruben", "I am Méral", "Nova, this is Ruben", etc.
 _WHOAMI_PATTERN = re.compile(
     r"^(?:nova,?\s+)?(?:i'?m |i am |this is |it'?s )(r(u|e)ben|m[eé]ral)$"
@@ -104,10 +122,17 @@ async def lifespan(app: FastAPI):
         )
 
     # CardDAV startup sync + 15-min scheduled sync (Phase 47)
-    asyncio.create_task(_carddav_startup_sync())
+    try:
+        carddav_task = asyncio.create_task(_carddav_startup_sync())
+        carddav_task.add_done_callback(_handle_task_exception)
+    except Exception as e:
+        log.warning("Failed to create CardDAV startup sync task: %s", e)
     scheduler.add_job(_carddav_startup_sync, "interval", minutes=15, id="carddav_sync", replace_existing=True)
 
-    scheduler.start()
+    try:
+        scheduler.start()
+    except Exception as e:
+        log.warning("Failed to start scheduler: %s", e)
 
     # Register Telegram bot command menu if enabled
     if settings.nova_telegram_enabled and settings.telegram_bot_token:
@@ -134,8 +159,14 @@ async def lifespan(app: FastAPI):
     
     yield
     # Shutdown scheduler and close database pool
-    scheduler.shutdown()
-    await db.close_pool()
+    try:
+        scheduler.shutdown()
+    except Exception as e:
+        log.warning("Scheduler shutdown error: %s", e)
+    try:
+        await db.close_pool()
+    except Exception as e:
+        log.warning("DB pool close error: %s", e)
 
 
 async def _carddav_startup_sync() -> None:
