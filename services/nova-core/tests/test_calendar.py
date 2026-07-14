@@ -12,9 +12,17 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from icalendar import Calendar as iCalendar
 
-from app.tools.calendar import create_event, list_events
+from app.tools.calendar import _clear_calendar_cache, create_event, list_events
 
 TZ = ZoneInfo("Europe/Amsterdam")
+
+
+@pytest.fixture(autouse=True)
+def _clear_caldav_cache():
+    """Clear the module-level _calendar_cache before every test so mock
+    configurations from one test don't leak into the next."""
+    _clear_calendar_cache()
+    yield
 
 
 def _make_caldav_mocks() -> tuple[MagicMock, MagicMock]:

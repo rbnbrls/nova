@@ -1,6 +1,7 @@
 """Calendar tool using self-hosted CalDAV (Radicale)."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import caldav
@@ -8,6 +9,17 @@ from icalendar import Calendar as iCalendar, Event as iEvent
 
 from .base import tool
 from ..config import settings
+
+log = logging.getLogger("nova-core.calendar")
+
+# CalDAV connection timeout in seconds — must match or be less than the
+# asyncio.wait_for timeout in _collect_admin_status (currently 5s).
+# Prevents the synchronous requests call from blocking the event loop
+# indefinitely when the server is unreachable.
+_CALDAV_TIMEOUT = 5
+
+# Cached DAVClient + Calendar to avoid a TCP + PROPFIND round-trip on every call.
+_calendar_cache: tuple[caldav.DAVClient, caldav.Calendar] | None = None
 
 
 def _normalize_dt(dt_str: str) -> datetime:
@@ -18,12 +30,40 @@ def _normalize_dt(dt_str: str) -> datetime:
 
 
 def _get_calendar() -> caldav.Calendar:
-    client = caldav.DAVClient(url=settings.caldav_url)
+    """Create (or return cached) DAVClient + Calendar.
+
+    Uses a module-level cache so that repeated calls within the same process
+    reuse the existing TCP connection and avoid a PROPFIND round-trip.
+
+    The underlying requests calls are synchronous — in an async context the
+    caller should wrap this in asyncio.to_thread or run_in_executor if the
+    event loop must not be blocked.
+    """
+    global _calendar_cache
+    if _calendar_cache is not None:
+        return _calendar_cache[1]
+
+    client = caldav.DAVClient(url=settings.caldav_url, timeout=_CALDAV_TIMEOUT)
     principal = client.principal()
     calendars = principal.calendars()
     if not calendars:
-        return principal.make_calendar(name="Household", calendar_id="household")
-    return calendars[0]
+        cal = principal.make_calendar(name="Household", calendar_id="household")
+    else:
+        cal = calendars[0]
+
+    _calendar_cache = (client, cal)
+    return cal
+
+
+def _clear_calendar_cache() -> None:
+    """Clear the cached DAVClient + Calendar connection.
+
+    Exposed for testing — call between test cases that use different
+    mock configurations to prevent cross-test leakage of the module-level
+    _calendar_cache.
+    """
+    global _calendar_cache
+    _calendar_cache = None
 
 
 @tool(
@@ -183,7 +223,7 @@ async def is_user_busy() -> bool:
             except Exception:
                 continue
     except Exception as e:
-        print(f"[ERROR] is_user_busy calendar query failed: {e}")
+        log.warning("is_user_busy calendar query failed: %s", e)
         return False  # Be conservative: if we can't check, don't block
     return False
 
@@ -198,7 +238,7 @@ async def detect_conflicts(start: datetime, end: datetime) -> list[dict]:
         calendar = _get_calendar()
         events = calendar.search(start=start, end=end, event=True, expand=True)
     except Exception as e:
-        print(f"[ERROR] detect_conflicts query failed: {e}")
+        log.warning("detect_conflicts query failed: %s", e)
         return []
 
     conflicts = []

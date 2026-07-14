@@ -44,7 +44,7 @@ async def send_morning_briefing_for_user(user_name: str):
             
     calendar = _get_calendar()
     events = calendar.search(start=start_of_today, end=end_of_today, event=True, expand=True)
-    
+
     briefing = f"Good morning, {user_name}! Here is your briefing for today.\n\n"
     
     briefing += "*Your Active Tasks:*\n"
