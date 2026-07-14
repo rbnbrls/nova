@@ -7,7 +7,7 @@ htpasswd_filename = /data/users.htpasswd
 htpasswd_encryption = bcrypt
 
 [storage]
-type = radicale.storage.filesystem
+type = multifilesystem
 filesystem_folder = /data/collections
 
 [rights]
