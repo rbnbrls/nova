@@ -28,6 +28,11 @@ MAX_HISTORY_MESSAGES = 20
 _CONFIRM_WORDS = {"yes", "confirm", "ok", "okay", "yep", "ja", "sure", "approve"}
 _DENY_WORDS = {"no", "not", "don't", "dont", "nope", "cancel", "stop", "unsure"}
 
+# In-memory pending confirmations for channels that don't pass history (CONFIRM-01)
+# Key: "{user}:{channel}:{tool_name}"  →  {"detail": str, "timestamp": float}
+_pending_confirmations: dict[str, dict] = {}
+_PENDING_CONFIRMATION_TTL = 300  # 5 minutes
+
 SYSTEM_PROMPT = (
     "You are Nova, a private household assistant for Ruben and Méral. "
     "You help them run a shared plan: tasks/todos, calendar events, and important emails. "
@@ -177,7 +182,6 @@ async def run_agent(
                     if fn_name in ("create_event", "complete_task", "ha_call_service", "forget"):
                         confirmed = False
                         if history:
-                            # Find the last assistant message requesting confirmation
                             last_assistant_msg = None
                             for msg in reversed(history):
                                 if msg.get("role") == "assistant":
@@ -185,6 +189,20 @@ async def run_agent(
                                     break
                             if last_assistant_msg and "[CONFIRMATION_REQUIRED]" in last_assistant_msg:
                                 confirmed = _is_confirmed(user_message)
+                        else:
+                            _confirm_key = f"{user}:{channel}:{fn_name}"
+                            _now_c = time.monotonic()
+                            for _k in list(_pending_confirmations):
+                                if _now_c - _pending_confirmations[_k]["timestamp"] > _PENDING_CONFIRMATION_TTL:
+                                    del _pending_confirmations[_k]
+                            pending_entry = _pending_confirmations.get(_confirm_key)
+                            if pending_entry is not None:
+                                confirmed = _is_confirmed(user_message)
+                                if not confirmed:
+                                    del _pending_confirmations[_confirm_key]
+                            else:
+                                detail = args.get("title") or args.get("content_pattern") or ""
+                                _pending_confirmations[_confirm_key] = {"detail": detail, "timestamp": _now_c}
 
                         if not confirmed:
                             # Record denied confirmation before early return
