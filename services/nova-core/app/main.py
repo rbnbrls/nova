@@ -89,13 +89,56 @@ async def lifespan(app: FastAPI):
     global voice_room_manager
     voice_room_manager = RoomSessionManager(pool, ttl_minutes=30)
     
-    # DIAGNOSTIC: All background tasks disabled to isolate crash cause
-    # Scheduler jobs, CardDAV sync, and all background tasks are disabled to
-    # determine if the ~55s crash is caused by any background async work.
-    log.warning("STARTUP DIAGNOSTIC: all background tasks disabled")
+    # Register background jobs
+    scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails")
+    scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler")
+    scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications")
+    scheduler.add_job(check_at_risk_tasks, "interval", hours=1, id="check_at_risk_tasks")
 
-    # CardDAV startup sync (Phase 47) — disabled for crash isolation
-    # log.info("CardDAV sync deferred (background tasks disabled)")
+    # Voice room session cleanup every 5 minutes
+    if voice_room_manager is not None:
+        scheduler.add_job(
+            voice_room_manager.clear_expired, "interval", minutes=5,
+            id="voice_room_cleanup"
+        )
+
+    # Register maintenance jobs (Phase 29) — all gated by maintenance_enabled
+    if settings.maintenance_enabled:
+        scheduler.add_job(
+            run_maintenance_dep_scan, "cron", hour=2, minute=0,
+            id="run_maintenance_dep_scan"
+        )
+        scheduler.add_job(
+            run_maintenance_log_anomaly, "cron", hour=3, minute=0,
+            id="run_maintenance_log_anomaly"
+        )
+        scheduler.add_job(
+            run_maintenance_backup_verify, "cron", hour=4, minute=0,
+            id="run_maintenance_backup_verify"
+        )
+        scheduler.add_job(
+            run_maintenance_trend_report, "cron", day_of_week="sun", hour=5, minute=0,
+            id="run_maintenance_trend_report"
+        )
+
+    # CardDAV startup sync — guarded: skip if CalDAV not configured
+    if settings.caldav_username and settings.caldav_password:
+        try:
+            carddav_task = asyncio.create_task(_carddav_startup_sync())
+            carddav_task.add_done_callback(_handle_task_exception)
+        except Exception as e:
+            log.warning("Failed to create CardDAV sync task: %s", e)
+        scheduler.add_job(
+            _carddav_startup_sync, "interval", minutes=15,
+            id="carddav_sync", replace_existing=True
+        )
+    else:
+        log.info("CardDAV sync skipped — CalDAV not configured")
+
+    try:
+        scheduler.start()
+    except Exception as e:
+        log.warning("Failed to start scheduler: %s", e)
 
     # Register Telegram bot command menu if enabled
     if settings.nova_telegram_enabled and settings.telegram_bot_token:
