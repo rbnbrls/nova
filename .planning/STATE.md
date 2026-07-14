@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1
 milestone_name: Foundation & Core Features
 status: Phase 40 in progress
-stopped_at: ~
-last_updated: "2026-07-13T22:00:00Z"
-last_activity: 2026-07-13
+stopped_at: Phase 41 context gathered
+last_updated: "2026-07-14T06:52:09.739Z"
+last_activity: 2026-07-14
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 4
+  completed_phases: 3
+  total_plans: 9
+  completed_plans: 6
+  percent: 67
 current_phase: 40
 current_phase_name: admin-panel-page
 current_plan: 40-02
@@ -25,7 +25,7 @@ See: `.planning/ROADMAP.md` (reorganized 2026-07-12)
 
 **Core value:** A private, fully local household assistant that Ruben & Méral can reach by text or voice, keeping a shared plan (tasks, calendar, important email) — reasoning and data never leave the house.
 
-**Current focus:** Phase 40 — admin-panel-page
+**Current focus:** Phase 41 — admin-panel-model-switcher
 
 ## Execution Order
 
@@ -274,13 +274,14 @@ Previous milestone artifacts (v1.0, v1.1, 2.0, v3.0) are preserved under `.plann
 - Phase 38 added: subdomain and email
 - Phase 39 added: add a input field for users to chat with nova on the /static/index.html page. Put the chat box in a column below the agenda.
 - Phase 40 added: admin panel page
+- Phase 41 added: admin panel model switcher
 
 ## Session
 
-**Last session:** 2026-07-13T22:00:00Z
-**Stopped at:** Phase 40 complete
-**Resume file:** ~
-**Last activity:** 2026-07-13
+**Last session:** 2026-07-14T06:32:01.540Z
+**Stopped at:** Phase 41 context gathered
+**Resume file:** .planning/phases/41-admin-panel-model-switcher-add-a-new-feature-where-the-admin/41-CONTEXT.md
+**Last activity:** 2026-07-14
 
 ### Quick Tasks Completed
 
