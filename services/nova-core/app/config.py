@@ -1,6 +1,8 @@
 """Runtime configuration, loaded from environment (see .env.example)."""
 from __future__ import annotations
 
+import logging
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -94,3 +96,56 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+log = logging.getLogger("nova-core")
+
+
+# --- Runtime-persistent config (Phase 41 — app_config DB table) ---
+# Module-level cache; re-reads from DB on each call. Writes are infrequent
+# and happen via the same process, so TTL is unnecessary.
+# TODO: Extend with active_embed_model, active_vision_model in future phases.
+_active_model_override: str | None = None
+
+
+async def get_active_model() -> str:
+    """Return active model from app_config, falling back to env default."""
+    if _active_model_override:
+        return _active_model_override
+    try:
+        from . import db
+
+        pool = await db.get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT value FROM app_config WHERE key = 'active_model'"
+            )
+            if row and row["value"]:
+                _active_model_override = row["value"]
+                return row["value"]
+    except Exception:
+        log.warning("Failed to read active_model from DB, using env default")
+    return settings.nova_model
+
+
+async def set_active_model(model: str) -> None:
+    """Persist active model to app_config (upsert)."""
+    global _active_model_override
+    from . import db
+
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO app_config (key, value) VALUES ('active_model', $1)
+            ON CONFLICT (key) DO UPDATE
+            SET value = EXCLUDED.value, updated_at = now()
+            """,
+            model,
+        )
+    _active_model_override = model
+
+
+def get_active_model_sync() -> str:
+    """Synchronous getter for places that cannot use await.
+    Falls back to env default if override hasn't been loaded yet."""
+    return _active_model_override or settings.nova_model
