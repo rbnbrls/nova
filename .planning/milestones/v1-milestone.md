@@ -1,8 +1,8 @@
 # Milestone v1: milestone
 
-**Status:** ✅ SHIPPED 2026-07-12
-**Phases:** 1-37
-**Total Plans:** 37 plans
+**Status:** ✅ SHIPPED 2026-07-14
+**Phases:** 1-47
+**Total Plans:** 56 plans
 
 ## Overview
 
@@ -197,26 +197,92 @@ Nova — a private, fully local household assistant. Complete rebuild of the age
 - [x] 36-01: Write-action audit trail
 
 ### Phase 37: Paper & Photo Intake
-**Goal**: WhatsApp image → local vision model → structured action.
-**Plans**: 1 plan (Wave 1 complete)
+**Goal:** WhatsApp image → local vision model → structured action.
+**Plans:** 1 plan (Wave 1 complete)
 - [x] 37-01: Image download + vision analysis
+
+### Phase 38: Subdomain and Email
+**Goal:** Replace MS Graph email with IMAP/SMTP, driven by NOVA_DOMAIN. Add send_email tool. IMAP flag dedup.
+**Plans:** 3 plans
+- [x] 38-01: Config fields (nova_domain, imap_*, smtp_*), remove azure_*, add aioimaplib + aiosmtplib
+- [x] 38-02: Core refactor: IMAP fetch, SMTP send, send_email tool, scheduler adaptation
+- [x] 38-03: Alembic migration to drop processed_emails, rewrite email and scheduler tests
+
+### Phase 39: Dashboard Chat
+**Goal:** Users can chat with Nova from the dashboard — send a message and see Nova's reply without switching to WhatsApp or Telegram.
+**Plans:** 1 plan
+- [x] 39-01: Backend POST /dashboard/chat endpoint + frontend chat section HTML/CSS/JS
+
+### Phase 40: Admin Panel Page
+**Goal:** Read-only admin status board at `/admin` showing system health (Ollama, Postgres, CalDAV, HA, Email IMAP) + per-user channel link status via SSE every 45s.
+**Plans:** 2 plans
+- [x] 40-01: Backend `/admin` redirect + `/admin/stream` SSE concurrent health checks + channel status
+- [x] 40-02: Frontend admin.html, admin.js SSE consumer, style.css admin block
+
+### Phase 41: Admin Panel Model Switcher
+**Goal:** Admin panel extended with full Ollama model management — runtime model switching with DB-backed persistent config, model store for browsing/downloading, and deletion of unused models.
+**Plans:** 3 plans
+- [x] 41-01: DB migration (app_config table), config helpers, admin_models Ollama proxy module, llm.py runtime model resolution
+- [x] 41-02: Backend model management endpoints (list, switch, pull, delete) + extended SSE payload with pull progress
+- [x] 41-03: Frontend model selector, model store card, switch modal in admin.html + admin.js handlers + CSS
+
+### Phase 42: Planning Data Model
+**Goal:** Canonical household planning schema — task duration, scheduling windows, dependencies, blockers, labels/templates, contacts for CardDAV.
+**Plans:** 1 plan
+- [x] 42-01: Migration 0013 (planning columns, task_dependencies, 5 contact tables) + app/contacts.py CRUD + Pydantic models + tool updates
+
+### Phase 43: Deterministic Auto-Scheduler
+**Goal:** First local planner turning tasks into time blocks using deadlines, durations, priorities, and availability.
+**Plans:** 1 plan
+- [x] 43-01: Planner module (scoring, slot selection, schedule builder), planned_blocks table (migration 0014), generate_plan tool, dashboard integration
+
+### Phase 44: Replanning and Risk Detection
+**Goal:** Adaptive planning — calendar/task changes trigger replanning; at-risk scoring flags tasks before they're overdue.
+**Plans:** 1 plan
+- [x] 44-01: Replanning engine (risk scoring, capacity, next-best-action), scheduler briefing integration, dashboard at-risk/next-action SSE payload
+
+### Phase 45: Task Intelligence and Household Coordination
+**Goal:** Motion-like task surface — labels, blockers, recurring templates, shared notes, collaboration.
+**Plans:** 2 plans
+- [x] 45-01: Backend migration 0015 (task_notes, is_template), task_notes module, intelligence tools (rename/reassign/detail/template), dashboard API
+- [x] 45-02: Frontend enhanced task cards (label pills, blocker icons, notes badges), task detail panel, label filter bar, activity feed enrichment
+
+### Phase 46: Calendar Intelligence and Meeting Assistance
+**Goal:** Calendar CRUD → assistance: availability search, meeting placement, free/busy, recurring edits, conflict-aware rescheduling.
+**Plans:** 2 plans
+- [x] 46-01: Calendar intelligence tools (find_free_slots, edit_event, delete_event, reschedule_event) + replan triggers
+- [x] 46-02: Free/busy + find-slot API endpoints, SSE availability summaries, dashboard recurrence display
+
+### Phase 47: CalDAV/CardDAV Interoperability
+**Goal:** Household planning data available via open standards — CalDAV and CardDAV for Nextcloud/Outlook clients.
+**Plans:** 1 plan
+- [x] 47-01: Hardened Radicale config, CardDAV sync bridge (contacts_sync.py), Caddy TLS proxy, LLM contact tools, CLIENT_PROFILES.md
 
 ## Milestone Summary
 
 **Key Accomplishments:**
 - Full private household assistant with multi-channel support (WhatsApp, Telegram, Voice)
-- Local LLM agent loop with 22 registered tools
-- Postgres-backed persistent storage (tasks, calendar, email, memories, preferences)
-- Proactive scheduling with per-user DND and calendar-aware delivery
-- Dashboard with SSE feeds for tasks, events, audit trail, and overdue escalation
-- CI/CD with pytest, Ruff linting, mypy type checking, and pre-commit hooks
+- Local LLM agent loop with 30+ registered tools
+- Postgres-backed persistent storage (tasks, calendar, email, memories, preferences, planning metadata)
+- Proactive scheduling with per-user DND, calendar-aware delivery, and at-risk detection
+- Dashboard with SSE feeds for tasks, events, plans, audit trail, chat, and risk escalation
+- Admin panel with live system health monitoring and Ollama model management (switch/pull/delete)
+- IMAP/SMTP email replacing MS Graph — fully local email handling
+- Deterministic auto-scheduler — time-blocked plans from deadlines, durations, and availability
+- Replanning engine — calendar/task changes trigger automatic schedule recomputation
+- Task intelligence — labels, blockers, recurring templates, shared notes, and collaboration
+- Calendar intelligence — free/busy search, conflict-aware rescheduling, recurring event handling
+- CalDAV/CardDAV interoperability — Radicale server, CardDAV sync bridge, client profiles for Nextcloud/Apple/Thunderbird
+- CI/CD with pytest (445+ passing), Ruff linting, mypy type checking, and pre-commit hooks
 - Ops infrastructure: staging lane, promotion gate, Forgejo issue filing, OpenObserve tracing
 - Security: HMAC auth, OTP verification, rate limiting, channel identity verification
 
 **Technical Details:**
-- 188 commits in this branch
-- 215 files changed, ~33,000 lines added
-- 37 phases, 37+ plans, each with SUMMARY.md and VERIFICATION.md
+- ~400 commits in this branch
+- 300+ files changed, ~40,000+ lines added
+- 47 phases, 56 plans, each with PLANNING, SUMMARY, and VERIFICATION artifacts
+- 6 Docker services orchestrated via docker-compose.yml
+- 5 Alembic migrations (0011–0015) on top of 0010 base
 - All phases verified passed
 
 **Issues Deferred:**
