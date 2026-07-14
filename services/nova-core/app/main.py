@@ -89,37 +89,10 @@ async def lifespan(app: FastAPI):
     global voice_room_manager
     voice_room_manager = RoomSessionManager(pool, ttl_minutes=30)
     
-    # Register background jobs
-    scheduler.add_job(check_new_emails, "interval", minutes=5, id="check_new_emails")
-    scheduler.add_job(run_briefing_scheduler, "interval", minutes=1, id="run_briefing_scheduler")
-    scheduler.add_job(process_queued_notifications, "interval", minutes=1, id="process_queued_notifications")
-    scheduler.add_job(check_at_risk_tasks, "interval", hours=1, id="check_at_risk_tasks")
-
-    # Voice room session cleanup every 5 minutes
-    if voice_room_manager is not None:
-        scheduler.add_job(
-            voice_room_manager.clear_expired, "interval", minutes=5,
-            id="voice_room_cleanup"
-        )
-
-    # Register maintenance jobs (Phase 29) — all gated by maintenance_enabled
-    if settings.maintenance_enabled:
-        scheduler.add_job(
-            run_maintenance_dep_scan, "cron", hour=2, minute=0,
-            id="run_maintenance_dep_scan"
-        )
-        scheduler.add_job(
-            run_maintenance_log_anomaly, "cron", hour=3, minute=0,
-            id="run_maintenance_log_anomaly"
-        )
-        scheduler.add_job(
-            run_maintenance_backup_verify, "cron", hour=4, minute=0,
-            id="run_maintenance_backup_verify"
-        )
-        scheduler.add_job(
-            run_maintenance_trend_report, "cron", day_of_week="sun", hour=5, minute=0,
-            id="run_maintenance_trend_report"
-        )
+    # DIAGNOSTIC: Schedule-less startup to isolate crash cause
+    # Background jobs and scheduler disabled temporarily to test if scheduler
+    # 1-min interval jobs cause the ~60s crash. Will re-enable after root cause is confirmed.
+    log.warning("STARTUP DIAGNOSTIC: scheduler disabled — no background jobs will run")
 
     # CardDAV startup sync + 15-min scheduled sync (Phase 47)
     try:
@@ -127,12 +100,6 @@ async def lifespan(app: FastAPI):
         carddav_task.add_done_callback(_handle_task_exception)
     except Exception as e:
         log.warning("Failed to create CardDAV startup sync task: %s", e)
-    scheduler.add_job(_carddav_startup_sync, "interval", minutes=15, id="carddav_sync", replace_existing=True)
-
-    try:
-        scheduler.start()
-    except Exception as e:
-        log.warning("Failed to start scheduler: %s", e)
 
     # Register Telegram bot command menu if enabled
     if settings.nova_telegram_enabled and settings.telegram_bot_token:
