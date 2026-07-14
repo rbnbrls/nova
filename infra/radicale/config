@@ -1,6 +1,5 @@
 [server]
 hosts = 0.0.0.0:5232
-realm = Nova Household
 
 [auth]
 type = htpasswd
