@@ -89,17 +89,13 @@ async def lifespan(app: FastAPI):
     global voice_room_manager
     voice_room_manager = RoomSessionManager(pool, ttl_minutes=30)
     
-    # DIAGNOSTIC: Schedule-less startup to isolate crash cause
-    # Background jobs and scheduler disabled temporarily to test if scheduler
-    # 1-min interval jobs cause the ~60s crash. Will re-enable after root cause is confirmed.
-    log.warning("STARTUP DIAGNOSTIC: scheduler disabled — no background jobs will run")
+    # DIAGNOSTIC: All background tasks disabled to isolate crash cause
+    # Scheduler jobs, CardDAV sync, and all background tasks are disabled to
+    # determine if the ~55s crash is caused by any background async work.
+    log.warning("STARTUP DIAGNOSTIC: all background tasks disabled")
 
-    # CardDAV startup sync + 15-min scheduled sync (Phase 47)
-    try:
-        carddav_task = asyncio.create_task(_carddav_startup_sync())
-        carddav_task.add_done_callback(_handle_task_exception)
-    except Exception as e:
-        log.warning("Failed to create CardDAV startup sync task: %s", e)
+    # CardDAV startup sync (Phase 47) — disabled for crash isolation
+    # log.info("CardDAV sync deferred (background tasks disabled)")
 
     # Register Telegram bot command menu if enabled
     if settings.nova_telegram_enabled and settings.telegram_bot_token:
