@@ -861,8 +861,8 @@ async def link_whatsapp_start(req: LinkWhatsAppStartRequest):
             detail="Failed to send verification code. Please try again.",
         )
 
-    # 8. Log code for debugging
-    print(f"[OTP STATUS] Verification code for {req.user} ({clean_number}): {code}")
+    # 8. Log that a code was sent (never log the code itself)
+    log.info("Verification code sent to user %s via WhatsApp", req.user)
 
     return {"status": "code_sent"}
 
@@ -1011,8 +1011,8 @@ async def link_telegram_start(req: LinkTelegramStartRequest):
             detail="Failed to send verification code via Telegram. Please try again.",
         )
 
-    # 7. Log code for debugging
-    print(f"[OTP STATUS] Telegram verification code for {req.user}: {code}")
+    # 7. Log that a code was sent (never log the code itself)
+    log.info("Verification code sent to user %s via Telegram", req.user)
 
     return {"status": "code_sent"}
 
@@ -1239,7 +1239,7 @@ async def request_code(req: RequestCodeRequest):
             if not sent:
                 raise RuntimeError("No chat_id found")
         except Exception as e:
-            print(f"[ERROR] Failed to send Telegram OTP to {req.user}: {e}")
+            log.error("Failed to send Telegram OTP to %s: %s", req.user, e)
             raise HTTPException(
                 status_code=502,
                 detail="Failed to send verification code via Telegram. Please try again."
@@ -1248,9 +1248,10 @@ async def request_code(req: RequestCodeRequest):
         try:
             await send_whatsapp_message(clean_number, otp_message)
         except Exception as e:
-            print(f"[ERROR] Failed to send OTP to {clean_number}: {e}")
+            log.error("Failed to send OTP to %s: %s", clean_number, e)
 
-    print(f"[OTP STATUS] Verification code for {req.user} ({clean_number}, {req.channel}): {code}")
+    # Never log the code itself — only metadata about which user/channel received it
+    log.info("Verification code sent to user %s via %s", req.user, req.channel)
     return {"status": "code_sent"}
 
 
