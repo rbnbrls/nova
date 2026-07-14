@@ -529,11 +529,12 @@ async def _collect_admin_status() -> dict:
     services: dict[str, dict] = {}
     for key, result in zip(keys, results):
         if isinstance(result, Exception):
-            # Defensive belt-and-suspenders: the _check_* helpers already
-            # catch their own exceptions and return a dict, so the branch
-            # should be unreachable.  Log server-side, never push str(e).
-            log.warning("admin %s check raised: %s", key, result)
-            services[key] = {"status": "down", "detail": f"{key} check failed", "host": ""}
+            log.warning("admin %s check raised: %s %s", key, type(result).__name__, result)
+            services[key] = {
+                "status": "down",
+                "detail": f"{key} check failed ({type(result).__name__})",
+                "host": "",
+            }
         else:
             services[key] = result
 
