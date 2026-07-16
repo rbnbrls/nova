@@ -8,29 +8,31 @@ Nova is a private, self-hosted household assistant for Ruben & Méral. It runs o
 
 A private, fully local household assistant that Ruben & Méral can reach by text or voice, keeping a shared plan (tasks, calendar, important email) — reasoning and data never leave the house.
 
-## Build Order
+## Current State
 
-The roadmap has been reorganized from scratch into 37 phases across 10 build tiers. All phases are reset to Not Started. Reference artifacts from previous milestones are preserved in `.planning/milestones/` for verification.
+**v1 SHIPPED** 2026-07-14 — 47 phases, 56 plans, ~400 commits, 40k+ lines of code.
 
-| Tier | Theme | Phases |
-|------|-------|--------|
-| 0 | Foundation | P1-P3 |
-| 1 | Tool Backends | P4-P8 |
-| 2 | Channels | P9-P10 |
-| 3 | Proactive & UX | P11-P12 |
-| 4 | User Management | P13-P16 |
-| 5 | Reliability & Security | P17-P18 |
-| 6 | Multi-Channel Infrastructure | P19-P22 |
-| 7 | Multi-Channel UX | P23-P25 |
-| 8 | Observability | P26-P29 |
-| 9 | Advanced Features | P30-P37 |
+Nova is a fully operational private household assistant with:
+- Multi-channel support (WhatsApp, Telegram, Voice via HA Assist)
+- Dashboard chat and admin panel with live model management
+- Deterministic auto-scheduler with replanning and risk detection
+- Task and calendar intelligence (labels, blockers, free/busy, conflict-aware rescheduling)
+- IMAP/SMTP email (fully local, replacing MS Graph)
+- CalDAV/CardDAV interoperability via Radicale
+- CI/CD with 445+ passing tests, Ruff linting, mypy type checking
+
+Deferred from v1: photo intake tool, voice-embedding speaker verification, HA WebSocket for real-time state, warranty receipt filing.
+
+See `.planning/milestones/v1-milestone.md` for full archive.
 
 ## Context
 
 - `docs/roadmap.md` is the original, pre-reorganization plan — superseded by `.planning/ROADMAP.md`
 - Household of two (Ruben, Méral) on a single Proxmox VM with an RTX 2000 Blackwell GPU (~16 GB VRAM)
-- Current model candidates: Qwen3-14B for chat/tool-calling, nomic-embed-text for embeddings
+- Current model: Qwen3-14B for chat/tool-calling, nomic-embed-text for embeddings
 - Testing: pytest + pytest-asyncio, unittest.mock, fastapi.testclient
+- 6 Docker services orchestrated via docker-compose.yml
+- 5 Alembic migrations (0011–0015) on top of 0010 base
 
 ## Constraints
 
@@ -44,22 +46,30 @@ The roadmap has been reorganized from scratch into 37 phases across 10 build tie
 
 | Decision | Rationale | Status |
 |----------|-----------|--------|
-| Fully local / air-gapped LLM | Privacy is core to household trust | Implemented in code |
-| Self-hosted CalDAV (Radicale) | Avoid another cloud dependency | Running in compose |
-| WhatsApp via Meta Cloud API | Reliability/ToS compliance | Wired, needs credentials |
-| Coolify for CI/CD | Git-driven deploy without managed PaaS | Implemented |
-| All DB migrations additive-only | No destructive changes to production data | Enforced |
+| Fully local / air-gapped LLM | Privacy is core to household trust | ✓ Good |
+| Self-hosted CalDAV (Radicale) | Avoid another cloud dependency | ✓ Good |
+| WhatsApp via Meta Cloud API | Reliability/ToS compliance | ✓ Good |
+| Coolify for CI/CD | Git-driven deploy without managed PaaS | ✓ Good |
+| All DB migrations additive-only | No destructive changes to production data | ✓ Good |
+| IMAP/SMTP over MS Graph | Fully local email processing | ✓ Good |
+| Deterministic auto-scheduler | Tasks planned into time blocks from deadlines/durations/availability | ✓ Good |
+| Replanning engine | Calendar/task changes trigger schedule recomputation | ✓ Good |
 
 ## Reference Artifacts
 
-Previous milestone artifacts preserved at `.planning/milestones/`:
-- `v1.0-phases/` — Original foundation phase summaries
-- `v1.1-phases/` — Phase 7-10 summaries
-- `2.0-phases/` — Phase 1-6, 11-12 summaries
-- `v3.0-phases/` — Phase 13-17 summaries
+Milestone archives preserved at `.planning/milestones/`:
+- `v1-milestone.md` — Full v1 phase list, decisions, tech debt
+- `v1-ROADMAP.md` — ROADMAP.md snapshot at v1 completion
+- `v1-STATE.md` — STATE.md snapshot at v1 completion
+- `v1-REQUIREMENTS.md` — Requirements at v1 completion
+- `v1-phases/` — Phase directories (selected phases)
+- `v1.1-ROADMAP.md`, `2.0-ROADMAP.md`, `v3.0-ROADMAP.md` — Previous milestone roadmaps
 
 These serve as implementation references when verifying each new phase against the existing codebase during the discuss phase.
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
+
+---
+*Last updated: 2026-07-16 after v1 milestone*

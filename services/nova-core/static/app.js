@@ -25,6 +25,18 @@ eventSource.onmessage = function(event) {
     }
 };
 
+eventSource.addEventListener('progress', function(event) {
+    try {
+        const data = JSON.parse(event.data);
+        const indicator = document.getElementById('chat-loading-indicator');
+        if (indicator) {
+            indicator.textContent = data.step + ' (' + data.elapsed_s + 's)';
+        }
+    } catch (e) {
+        console.error('Failed to parse progress event:', e);
+    }
+});
+
 eventSource.onerror = function(err) {
     console.error('SSE connection lost, reconnecting...', err);
     document.querySelector('.status-text').textContent = 'Disconnected (Reconnecting...)';
