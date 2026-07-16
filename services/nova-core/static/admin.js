@@ -38,6 +38,7 @@ const SERVICE_COPY = {
     caldav: { ok: 'Reachable', down: 'Unreachable' },
     ha: { ok: 'Ready', down: 'Unreachable' },
     email: { ok: 'Connected', down: 'Disconnected' },
+    gpu: { ok: 'Available', down: 'Unavailable' },
 };
 
 function renderServices(services) {
@@ -110,8 +111,35 @@ function renderState(state) {
             }
         }
     }
+    // GPU stats sub-panel
+    const gpuState = state.services && state.services.gpu;
+    if (gpuState) {
+        renderGpuStats(gpuState);
+    }
+
     const banner = document.getElementById('admin-error-banner');
     if (banner) banner.setAttribute('hidden', '');
+}
+
+function renderGpuStats(gpuState) {
+    const statsEl = document.getElementById('gpu-stats');
+    if (!statsEl) return;
+    if (gpuState.status !== 'ok') {
+        statsEl.classList.add('hidden');
+        return;
+    }
+    statsEl.classList.remove('hidden');
+    const setText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val || '—';
+    };
+    const vram = gpuState.vram_used_mb !== 'N/A' && gpuState.vram_total_mb !== 'N/A'
+        ? `${gpuState.vram_used_mb} / ${gpuState.vram_total_mb} MB`
+        : gpuState.vram_used_mb !== 'N/A' ? `${gpuState.vram_used_mb} MB` : '—';
+    setText('gpu-vram', vram);
+    setText('gpu-temp', gpuState.gpu_temp_c !== 'N/A' ? `${gpuState.gpu_temp_c} °C` : '—');
+    setText('gpu-util', gpuState.gpu_util_pct !== 'N/A' ? `${gpuState.gpu_util_pct}%` : '—');
+    setText('gpu-loaded', gpuState.loaded_models || '—');
 }
 
 // SSE listener

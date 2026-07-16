@@ -843,8 +843,119 @@ async def _check_imap() -> dict:
                 pass
 
 
+async def _run_cmd(*args: str) -> tuple[int, str, str]:
+    """Run an external command asynchronously with a 15s timeout."""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            proc.communicate(), timeout=15,
+        )
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return -1, "", "TIMEOUT"
+    return (
+        proc.returncode or 0,
+        stdout_bytes.decode(errors="replace") if stdout_bytes else "",
+        stderr_bytes.decode(errors="replace") if stderr_bytes else "",
+    )
+
+
+async def _check_gpu() -> dict:
+    """GPU health check — VRAM, temp, utilization via nvidia-smi.
+
+    Falls back to Ollama's /api/ps to show loaded models if nvidia-smi
+    is not available in the container.
+    """
+    try:
+        ret, stdout, stderr = await _run_cmd(
+            "nvidia-smi",
+            "--query-gpu=name,memory.total,memory.used,temperature.gpu,utilization.gpu",
+            "--format=csv,noheader,nounits",
+        )
+        if ret == 0 and stdout.strip():
+            parts = [p.strip() for p in stdout.strip().split(",")]
+            if len(parts) >= 5:
+                name = parts[0]
+                vram_total = int(parts[1]) if parts[1].isdigit() else 0
+                vram_used = int(parts[2]) if parts[2].isdigit() else 0
+                gpu_temp = int(parts[3]) if parts[3].isdigit() else 0
+                gpu_util = int(parts[4]) if parts[4].isdigit() else 0
+                vram_pct = (vram_used / vram_total * 100) if vram_total > 0 else 0
+
+                # Also query Ollama for loaded models in VRAM
+                loaded = "N/A"
+                try:
+                    async with httpx.AsyncClient(timeout=3) as client:
+                        ps = await client.get(f"{settings.ollama_base_url}/api/ps")
+                        if ps.status_code == 200:
+                            data = ps.json()
+                            models = data.get("models", [])
+                            if models:
+                                loaded = ", ".join(m["name"] for m in models)
+                except Exception:
+                    pass
+
+                detail = f"{name} · {vram_used}/{vram_total} MB · {gpu_util}%"
+                return {
+                    "status": "ok",
+                    "detail": detail,
+                    "gpu_name": name,
+                    "vram_total_mb": vram_total,
+                    "vram_used_mb": vram_used,
+                    "vram_pct": round(vram_pct, 1),
+                    "gpu_temp_c": gpu_temp,
+                    "gpu_util_pct": gpu_util,
+                    "loaded_models": loaded,
+                }
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        log.warning("admin _check_gpu failed: %s", exc)
+
+    # Fallback: try Ollama /api/ps for loaded model info
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            ps = await client.get(f"{settings.ollama_base_url}/api/ps")
+            if ps.status_code == 200:
+                data = ps.json()
+                models = data.get("models", [])
+                if models:
+                    loaded = ", ".join(m["name"] for m in models)
+                    total_vram = sum(m.get("size_vram", 0) for m in models) // (1024 * 1024)
+                    return {
+                        "status": "ok",
+                        "detail": f"Ollama loaded: {loaded} ({total_vram} MB VRAM)" if total_vram else f"Ollama loaded: {loaded}",
+                        "gpu_name": "N/A (no nvidia-smi)",
+                        "vram_total_mb": "N/A",
+                        "vram_used_mb": total_vram or "N/A",
+                        "vram_pct": "N/A",
+                        "gpu_temp_c": "N/A",
+                        "gpu_util_pct": "N/A",
+                        "loaded_models": loaded,
+                    }
+    except Exception:
+        pass
+
+    return {
+        "status": "down",
+        "detail": "GPU stats unavailable (no nvidia-smi /api/ps)",
+        "gpu_name": "N/A",
+        "vram_total_mb": "N/A",
+        "vram_used_mb": "N/A",
+        "vram_pct": "N/A",
+        "gpu_temp_c": "N/A",
+        "gpu_util_pct": "N/A",
+        "loaded_models": "N/A",
+    }
+
+
 async def _collect_admin_status() -> dict:
-    """Run all 5 service checks concurrently + the channel-link query.
+    """Run all service checks concurrently + the channel-link query.
 
     Uses asyncio.gather(return_exceptions=True) so one failing check does
     not abort the others (D-02 isolation).  Each check is capped at 5s via
@@ -857,10 +968,11 @@ async def _collect_admin_status() -> dict:
         asyncio.wait_for(_check_caldav(), timeout=5),
         asyncio.wait_for(_check_ha(), timeout=5),
         asyncio.wait_for(_check_imap(), timeout=5),
+        asyncio.wait_for(_check_gpu(), timeout=5),
     ]
     results = await asyncio.gather(*checks, return_exceptions=True)
 
-    keys = ("ollama", "postgres", "caldav", "ha", "email")
+    keys = ("ollama", "postgres", "caldav", "ha", "email", "gpu")
     services: dict[str, dict] = {}
     for key, result in zip(keys, results):
         if isinstance(result, Exception):

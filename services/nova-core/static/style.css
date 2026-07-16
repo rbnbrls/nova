@@ -1672,3 +1672,32 @@ body {
     to { transform: rotate(360deg); }
 }
 
+/* GPU stats sub-panel */
+.gpu-stats {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.gpu-stats.hidden {
+    display: none;
+}
+
+.gpu-stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+}
+
+.gpu-stat-label {
+    color: var(--text-secondary);
+}
+
+.gpu-stat-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
