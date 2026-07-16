@@ -233,29 +233,29 @@ async def dashboard_tasks() -> dict:
             """
         )
 
-    task_ids = [str(r["id"]) for r in rows]
-    note_counts: dict[str, int] = {}
-    blocker_titles: dict[str, list[str]] = {}
-    if task_ids:
-        note_rows = await conn.fetch(
-            "SELECT task_id, COUNT(*) as cnt FROM task_notes WHERE task_id = ANY($1::uuid[]) GROUP BY task_id",
-            task_ids,
-        )
-        for nr in note_rows:
-            note_counts[str(nr["task_id"])] = nr["cnt"]
+        task_ids = [str(r["id"]) for r in rows]
+        note_counts: dict[str, int] = {}
+        blocker_titles: dict[str, list[str]] = {}
+        if task_ids:
+            note_rows = await conn.fetch(
+                "SELECT task_id, COUNT(*) as cnt FROM task_notes WHERE task_id = ANY($1::uuid[]) GROUP BY task_id",
+                task_ids,
+            )
+            for nr in note_rows:
+                note_counts[str(nr["task_id"])] = nr["cnt"]
 
-        dep_rows = await conn.fetch(
-            """
-            SELECT td.child_id, t.title as blocker_title
-            FROM task_dependencies td
-            JOIN tasks t ON t.id = td.parent_id
-            WHERE td.child_id = ANY($1::uuid[])
-            """,
-            task_ids,
-        )
-        for dr in dep_rows:
-            cid = str(dr["child_id"])
-            blocker_titles.setdefault(cid, []).append(dr["blocker_title"])
+            dep_rows = await conn.fetch(
+                """
+                SELECT td.child_id, t.title as blocker_title
+                FROM task_dependencies td
+                JOIN tasks t ON t.id = td.parent_id
+                WHERE td.child_id = ANY($1::uuid[])
+                """,
+                task_ids,
+            )
+            for dr in dep_rows:
+                cid = str(dr["child_id"])
+                blocker_titles.setdefault(cid, []).append(dr["blocker_title"])
 
     tasks = []
     now_utc = datetime.now(timezone.utc)
