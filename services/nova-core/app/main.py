@@ -44,6 +44,7 @@ from .voice_rooms import RoomSessionManager
 from .contacts_sync import sync_all_contacts as _carddav_sync_all
 
 from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, check_at_risk_tasks, run_briefing_scheduler, process_queued_notifications, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
+from .progress import get_progress_queue
 
 log = logging.getLogger("nova-core")
 
@@ -345,6 +346,98 @@ async def dashboard_audit(limit: int = 50) -> dict:
     return {"audit": entries}
 
 
+@app.get("/dashboard/traces")
+async def dashboard_traces(
+    user: str | None = Query(None),
+    channel: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=200),
+) -> dict:
+    """Return recent agent turns with per-iteration timing, filterable by user/channel.
+
+    Queries ``agent_turns`` with an optional filter on ``user`` and ``channel``,
+    then fetches child ``agent_iterations`` rows in a second pass and merges
+    them in Python.  Follows the same sequential-query pattern as
+    ``dashboard_task_detail()``.
+    """
+    pool = await db.get_pool()
+    async with pool.acquire() as conn:
+        # Build the query dynamically with parameterized placeholders
+        where_clauses: list[str] = []
+        params: list = []
+
+        if user:
+            idx = len(params) + 1
+            where_clauses.append(f"t.user = ${idx}::text")
+            params.append(user)
+        if channel:
+            idx = len(params) + 1
+            where_clauses.append(f"t.channel = ${idx}::text")
+            params.append(channel)
+
+        where_sql = " AND ".join(where_clauses) if where_clauses else "TRUE"
+
+        rows = await conn.fetch(
+            f"""
+            SELECT t.id, t.user, t.channel, t.total_latency_ms,
+                   t.token_count, t.iteration_count, t.got_stuck,
+                   t.error_count, t.created_at
+            FROM agent_turns t
+            WHERE {where_sql}
+            ORDER BY t.created_at DESC
+            LIMIT ${len(params) + 1}
+            """,
+            *params,
+            limit,
+        )
+
+        if not rows:
+            return {"traces": []}
+
+        # Fetch iterations for all returned turn IDs
+        turn_ids = [str(r["id"]) for r in rows]
+        it_rows = await conn.fetch(
+            """
+            SELECT turn_id, iteration_num, llm_time_ms, tool_time_ms,
+                   tool_name, prompt_tokens, completion_tokens
+            FROM agent_iterations
+            WHERE turn_id = ANY($1::uuid[])
+            ORDER BY iteration_num ASC
+            """,
+            turn_ids,
+        )
+
+    # Merge iterations into traces by turn_id
+    iterations_by_turn: dict[str, list[dict]] = {}
+    for it in it_rows:
+        tid = str(it["turn_id"])
+        iterations_by_turn.setdefault(tid, []).append({
+            "iteration_num": it["iteration_num"],
+            "llm_time_ms": it["llm_time_ms"],
+            "tool_time_ms": it["tool_time_ms"],
+            "tool_name": it["tool_name"],
+            "prompt_tokens": it["prompt_tokens"],
+            "completion_tokens": it["completion_tokens"],
+        })
+
+    traces = []
+    for r in rows:
+        tid = str(r["id"])
+        traces.append({
+            "id": tid,
+            "user": r["user"],
+            "channel": r["channel"],
+            "total_latency_ms": r["total_latency_ms"],
+            "token_count": r["token_count"],
+            "iteration_count": r["iteration_count"],
+            "got_stuck": r["got_stuck"],
+            "error_count": r["error_count"],
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            "iterations": iterations_by_turn.get(tid, []),
+        })
+
+    return {"traces": traces}
+
+
 @app.get("/dashboard")
 async def dashboard_redirect():
     return RedirectResponse(url="/static/index.html")
@@ -538,6 +631,14 @@ async def dashboard_stream():
                     payload["next_action"] = {"has_next_action": False}
 
                 yield f"data: {json.dumps(payload)}\n\n"
+
+                # Drain progress events from the shared async queue (D-04)
+                try:
+                    while True:
+                        progress = get_progress_queue().get_nowait()
+                        yield f"event: progress\ndata: {json.dumps(progress)}\n\n"
+                except asyncio.QueueEmpty:
+                    pass
             except Exception as e:
                 log.warning("SSE generator error: %s", e)
             await asyncio.sleep(15)

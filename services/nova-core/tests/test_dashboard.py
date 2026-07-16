@@ -230,3 +230,110 @@ def test_dashboard_html_has_mic_button(client):
     assert b'id="chat-btn-mic"' in resp.content
     # Sanity: chat panel still present
     assert b'id="chat-panel"' in resp.content
+
+
+# ------------------------------------------------------------------
+# Traces endpoint tests
+# ------------------------------------------------------------------
+
+
+def test_dashboard_traces_endpoint(client):
+    """GET /dashboard/traces returns traces with iterations."""
+    from datetime import datetime
+
+    mock_turn_row = {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "user": "Ruben",
+        "channel": "api",
+        "total_latency_ms": 1234,
+        "token_count": 567,
+        "iteration_count": 2,
+        "got_stuck": False,
+        "error_count": 0,
+        "created_at": datetime(2026, 7, 16, 12, 0, 0),
+    }
+    mock_iteration_row = {
+        "turn_id": "00000000-0000-0000-0000-000000000001",
+        "iteration_num": 1,
+        "llm_time_ms": 800,
+        "tool_time_ms": 200,
+        "tool_name": "add_task",
+        "prompt_tokens": 150,
+        "completion_tokens": 50,
+    }
+    mock_conn = AsyncMock()
+    mock_conn.fetch.side_effect = [
+        [mock_turn_row],        # First fetch: agent_turns query
+        [mock_iteration_row],   # Second fetch: agent_iterations query
+    ]
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    with patch("app.main.db.get_pool", new_callable=AsyncMock) as mock_get_pool:
+        mock_get_pool.return_value = mock_pool
+        resp = client.get("/dashboard/traces")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "traces" in data
+    assert len(data["traces"]) == 1
+    trace = data["traces"][0]
+    assert trace["user"] == "Ruben"
+    assert trace["channel"] == "api"
+    assert trace["total_latency_ms"] == 1234
+    assert trace["token_count"] == 567
+    assert trace["iteration_count"] == 2
+    assert trace["got_stuck"] is False
+    assert trace["error_count"] == 0
+    assert "created_at" in trace
+    assert len(trace["iterations"]) == 1
+    assert trace["iterations"][0]["iteration_num"] == 1
+
+
+def test_dashboard_traces_filters_by_user(client):
+    """GET /dashboard/traces with user param filters correctly."""
+    from datetime import datetime
+
+    mock_turn_row = {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "user": "Meral",
+        "channel": "api",
+        "total_latency_ms": 500,
+        "token_count": 100,
+        "iteration_count": 1,
+        "got_stuck": False,
+        "error_count": 0,
+        "created_at": datetime(2026, 7, 16, 13, 0, 0),
+    }
+    mock_conn = AsyncMock()
+    mock_conn.fetch.side_effect = [
+        [mock_turn_row],   # First fetch: agent_turns filtered by user
+        [],                 # Second fetch: no iterations
+    ]
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    with patch("app.main.db.get_pool", new_callable=AsyncMock) as mock_get_pool:
+        mock_get_pool.return_value = mock_pool
+        resp = client.get("/dashboard/traces?user=Meral")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["traces"]) == 1
+    assert data["traces"][0]["user"] == "Meral"
+
+
+def test_dashboard_traces_empty(client):
+    """GET /dashboard/traces returns empty list when no traces exist."""
+    mock_conn = AsyncMock()
+    mock_conn.fetch.return_value = []  # No turns
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    with patch("app.main.db.get_pool", new_callable=AsyncMock) as mock_get_pool:
+        mock_get_pool.return_value = mock_pool
+        resp = client.get("/dashboard/traces")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {"traces": []}
