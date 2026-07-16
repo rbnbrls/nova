@@ -205,7 +205,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request, user: s
     try:
         reply = await run_agent(last, user=resolved_user, history=history, channel="api")
     except Exception as e:
-        log.error("Agent loop failed: %s", e)
+        log.error("Agent loop failed: %s: %s", type(e).__name__, e)
         reply = "Nova is having trouble right now, please try again later."
 
     return ChatCompletionResponse(
