@@ -257,7 +257,7 @@ async def run_agent(
                         args = json.loads(args or "{}")
 
                     # CONFIRM-01: Intercept destructive or write action tools for confirmation
-                    if fn_name in ("create_event", "complete_task", "ha_call_service", "forget"):
+                    if fn_name in ("ha_call_service", "forget"):
                         confirmed = False
                         if history:
                             last_assistant_msg = None
@@ -336,7 +336,7 @@ async def run_agent(
                             tool_name=fn["name"],
                             action_summary=_summarize_action(fn["name"], args, result),
                             status="completed",
-                            confirmation_required=(fn["name"] in ("create_event", "complete_task", "forget")),
+                            confirmation_required=(fn["name"] == "forget"),
                         )
                     messages.append({"role": "tool", "content": result})
     except TimeoutError:

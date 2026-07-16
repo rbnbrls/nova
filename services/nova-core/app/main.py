@@ -43,7 +43,7 @@ from .tools.home_assistant import _ha_get
 from .voice_rooms import RoomSessionManager
 from .contacts_sync import sync_all_contacts as _carddav_sync_all
 
-from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, check_at_risk_tasks, run_briefing_scheduler, process_queued_notifications, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
+from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, check_at_risk_tasks, run_briefing_scheduler, process_queued_notifications, purge_old_audit_logs, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
 from .progress import get_progress_queue
 
 log = logging.getLogger("nova-core")
@@ -75,9 +75,10 @@ async def _scheduler_main():
             # Run every minute
             await run_briefing_scheduler()
             await process_queued_notifications()
-            # Run check_at_risk_tasks once per hour
+            # Run once per hour
             if now.minute == 0 and now.second < 5:
                 await check_at_risk_tasks()
+                await purge_old_audit_logs()
         except Exception as exc:
             log.warning("Scheduler tick failed: %s: %s", type(exc).__name__, exc)
         await asyncio.sleep(55)
@@ -326,7 +327,6 @@ async def dashboard_audit(limit: int = 50) -> dict:
             """
             SELECT id, created_at, user_name, tool_name, action_summary, status, confirmation_required
             FROM audit_log
-            WHERE created_at > now() - interval '90 days'
             ORDER BY created_at DESC
             LIMIT $1
             """,

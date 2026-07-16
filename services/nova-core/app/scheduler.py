@@ -394,6 +394,20 @@ async def process_queued_notifications():
 # ------------------------------------------------------------------
 
 
+async def purge_old_audit_logs():
+    """Delete audit_log entries older than 48 hours."""
+    pool = await get_pool()
+    try:
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM audit_log WHERE created_at < now() - interval '48 hours'"
+            )
+            if result != "DELETE 0":
+                log.info("Purged %s old audit log entries", result)
+    except Exception:
+        log.exception("Failed to purge old audit logs")
+
+
 async def run_maintenance_dep_scan():
     """Nightly dependency/CVE check."""
     if not settings.maintenance_dep_check_enabled:
