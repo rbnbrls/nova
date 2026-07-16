@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import time
+import uuid
 
 from datetime import datetime, timezone
 import zoneinfo
@@ -20,7 +21,9 @@ from .audit import record_tool_call
 from .config import settings
 from .db import get_user_memories
 from .feedback import detect_feedback_text, feedback_context, file_feedback_issue, TurnContext  # D-01, D-02, D-03
-from .tracer import AgentTrace, emit_trace
+from .progress import push_progress
+from .tracer import AgentTrace, emit_trace, check_and_alert_slowness
+from .agent_tracer import insert_agent_traces
 
 _MAX_MUTATING_TOOLS = {"add_task", "complete_task", "create_event", "ha_call_service", "remember", "forget"}
 MAX_HISTORY_MESSAGES = 20
@@ -114,6 +117,8 @@ async def run_agent(
     _tool_records: list[dict] = []
     _errors: list[dict] = []
     _total_tokens = 0
+    _turn_id = str(uuid.uuid4())
+    _iterations: list[dict] = []
 
     tz = zoneinfo.ZoneInfo(settings.nova_timezone)
     now_str = datetime.now(tz).isoformat()
@@ -171,6 +176,7 @@ async def run_agent(
                                 errors=[], iteration_count=1,
                                 got_stuck=False,
                                 timestamp=datetime.now(timezone.utc).isoformat(),
+                                turn_id=_turn_id, iterations=list(_iterations),
                             )))
                         try:
                             result = await tools.call_tool(entry["fn"], entry["args"], user=user)
@@ -186,13 +192,26 @@ async def run_agent(
     try:
         async with asyncio.timeout(settings.nova_max_turn_timeout):
             for iteration in range(1, settings.nova_max_iterations + 1):
+                _llm_start = time.monotonic()
                 result = await llm.chat(messages, tools=specs)
+                _llm_time_ms = int((time.monotonic() - _llm_start) * 1000)
+                await push_progress("llm", round(_llm_time_ms / 1000, 1))
                 messages.append(result.message)
                 _total_tokens += result.prompt_tokens + result.completion_tokens
+                _llm_prompt_tokens = result.prompt_tokens
+                _llm_completion_tokens = result.completion_tokens
 
                 tool_calls = result.message.get("tool_calls")
                 if not tool_calls:
                     _latency = int((time.monotonic() - _start) * 1000)
+                    _iterations.append({
+                        "iteration_num": iteration,
+                        "llm_time_ms": _llm_time_ms,
+                        "tool_time_ms": 0,
+                        "tool_name": "",
+                        "prompt_tokens": result.prompt_tokens,
+                        "completion_tokens": result.completion_tokens,
+                    })
                     if settings.nova_tracing_enabled:
                         asyncio.create_task(emit_trace(AgentTrace(
                             channel=channel, user=user, latency_ms=_latency,
@@ -200,7 +219,20 @@ async def run_agent(
                             errors=_errors, iteration_count=iteration,
                             got_stuck=False,
                             timestamp=datetime.now(timezone.utc).isoformat(),
+                            turn_id=_turn_id, iterations=list(_iterations),
                         )))
+
+                    # Post-turn enrichment: DB insert + slowness alert (fire-and-forget)
+                    if _iterations or _errors:
+                        _enriched_trace = AgentTrace(
+                            channel=channel, user=user, latency_ms=_latency,
+                            token_count=_total_tokens, tool_calls=_tool_records,
+                            errors=_errors, iteration_count=iteration,
+                            got_stuck=False, timestamp=datetime.now(timezone.utc).isoformat(),
+                            turn_id=_turn_id, iterations=list(_iterations),
+                        )
+                        asyncio.create_task(insert_agent_traces(_enriched_trace))
+                        asyncio.create_task(check_and_alert_slowness(_enriched_trace))
 
                     # Capture conversation context for feedback module (D-02)
                     feedback_context.capture(user, TurnContext(
@@ -270,6 +302,7 @@ async def run_agent(
                                     errors=_errors, iteration_count=iteration,
                                     got_stuck=False,
                                     timestamp=datetime.now(timezone.utc).isoformat(),
+                                    turn_id=_turn_id, iterations=list(_iterations),
                                 )))
                             detail = args.get("title") or args.get("content_pattern") or ""
                             return f"[CONFIRMATION_REQUIRED] Would you like me to proceed with {fn_name} for '{detail}'?"
@@ -279,6 +312,15 @@ async def run_agent(
                         result = await tools.call_tool(fn["name"], args, user=user)
                         _tc_dur = int((time.monotonic() - _tc_start) * 1000)
                         _tool_records.append({"name": fn_name, "status": "completed", "duration_ms": _tc_dur})
+                        await push_progress(fn_name, round(_tc_dur / 1000, 1))
+                        _iterations.append({
+                            "iteration_num": iteration,
+                            "llm_time_ms": _llm_time_ms,
+                            "tool_time_ms": _tc_dur,
+                            "tool_name": fn_name,
+                            "prompt_tokens": _llm_prompt_tokens,
+                            "completion_tokens": _llm_completion_tokens,
+                        })
                     except Exception as e:
                         _tc_dur = int((time.monotonic() - _tc_start) * 1000)
                         err_msg = str(e)[:300]
@@ -307,7 +349,19 @@ async def run_agent(
                 errors=_errors, iteration_count=iteration if 'iteration' in dir() else settings.nova_max_iterations,
                 got_stuck=False,
                 timestamp=datetime.now(timezone.utc).isoformat(),
+                turn_id=_turn_id, iterations=list(_iterations),
             )))
+        # Post-turn: DB insert + slowness alert for partial data (fire-and-forget)
+        if _iterations or _errors:
+            _enriched_trace = AgentTrace(
+                channel=channel, user=user, latency_ms=_latency,
+                token_count=_total_tokens, tool_calls=_tool_records,
+                errors=_errors, iteration_count=iteration if 'iteration' in dir() else settings.nova_max_iterations,
+                got_stuck=False, timestamp=datetime.now(timezone.utc).isoformat(),
+                turn_id=_turn_id, iterations=list(_iterations),
+            )
+            asyncio.create_task(insert_agent_traces(_enriched_trace))
+            asyncio.create_task(check_and_alert_slowness(_enriched_trace))
         return "Sorry, I took too long to think about that. Could you try again?"
 
     except Exception:
@@ -319,6 +373,7 @@ async def run_agent(
                 errors=_errors, iteration_count=settings.nova_max_iterations,
                 got_stuck=False,
                 timestamp=datetime.now(timezone.utc).isoformat(),
+                turn_id=_turn_id, iterations=list(_iterations),
             )))
         raise
 
@@ -333,7 +388,20 @@ async def run_agent(
             errors=_errors, iteration_count=settings.nova_max_iterations,
             got_stuck=True,
             timestamp=datetime.now(timezone.utc).isoformat(),
+            turn_id=_turn_id, iterations=list(_iterations),
         )))
+
+    # Post-turn: DB insert + slowness alert (fire-and-forget)
+    if _iterations or _errors:
+        _enriched_trace = AgentTrace(
+            channel=channel, user=user, latency_ms=_latency,
+            token_count=_total_tokens, tool_calls=_tool_records,
+            errors=_errors, iteration_count=settings.nova_max_iterations,
+            got_stuck=True, timestamp=datetime.now(timezone.utc).isoformat(),
+            turn_id=_turn_id, iterations=list(_iterations),
+        )
+        asyncio.create_task(insert_agent_traces(_enriched_trace))
+        asyncio.create_task(check_and_alert_slowness(_enriched_trace))
 
     # Capture context for got-stuck turns too (D-02)
     feedback_context.capture(user, TurnContext(
