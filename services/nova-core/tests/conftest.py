@@ -8,9 +8,16 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="function")
 def _mock_db_dependencies():
-    """Mock get_user_memories and record_tool_call to avoid DB dependency in unit tests."""
+    """Mock get_user_memories and record_tool_call to avoid DB dependency in unit tests.
+    
+    Previously was ``autouse=True`` but that broke all test files in environments
+    where ``app.agent`` and its transitive dependencies are not installed.
+    Test files that need this fixture must declare it explicitly:
+    
+        pytestmark = pytest.mark.usefixtures("_mock_db_dependencies")
+    """
     with patch("app.agent.get_user_memories", new_callable=AsyncMock) as m_mem, \
          patch("app.agent.record_tool_call", new_callable=AsyncMock) as m_audit:
         m_mem.return_value = ""
