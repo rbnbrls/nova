@@ -25,7 +25,7 @@ def upgrade() -> None:
                   server_default=sa.func.now(), nullable=False),
     )
     op.execute(
-        "INSERT INTO app_config (key, value) VALUES ('active_model', 'qwen2.5:7b') "
+        "INSERT INTO app_config (key, value) VALUES ('active_model', 'qwen3:14b') "
         "ON CONFLICT (key) DO NOTHING"
     )
 
