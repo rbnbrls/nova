@@ -43,32 +43,12 @@ from .tools.home_assistant import _ha_get
 from .voice_rooms import RoomSessionManager
 from .contacts_sync import sync_all_contacts as _carddav_sync_all
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, check_at_risk_tasks, run_briefing_scheduler, process_queued_notifications, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
 
 log = logging.getLogger("nova-core")
 
-scheduler = AsyncIOScheduler()
-
 voice_room_manager: RoomSessionManager | None = None
 
-
-def _handle_task_exception(task: asyncio.Task) -> None:
-    """Log any unhandled exception from a background asyncio task.
-    
-    Without this callback, an exception in an asyncio.create_task() would
-    be silently swallowed until garbage-collected, at which point Python
-    logs "Task exception was never retrieved". This callback surfaces the
-    error immediately at WARNING level (D-02: never crash from a background
-    task failure).
-    """
-    try:
-        exc = task.exception()
-        if exc is not None:
-            log.warning("Background task %s raised: %s: %s",
-                        task.get_name(), type(exc).__name__, exc)
-    except asyncio.CancelledError:
-        pass  # Task was cancelled — not an error.
 
 def _handle_task_exception(task: asyncio.Task) -> None:
     """Log any unhandled exception from a background asyncio task."""
@@ -79,22 +59,6 @@ def _handle_task_exception(task: asyncio.Task) -> None:
                         task.get_name(), type(exc).__name__, exc)
     except asyncio.CancelledError:
         pass
-
-
-def _run_scheduler_loop():
-    """Run background scheduler jobs in a dedicated event loop (separate thread).
-    
-    This keeps background work isolated from uvicorn's main event loop,
-    preventing any scheduler-related crashes from taking down the application.
-    """
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(_scheduler_main())
-    except Exception:
-        log.warning("Scheduler thread exited with error", exc_info=True)
-    finally:
-        loop.close()
 
 
 async def _scheduler_main():
@@ -137,13 +101,9 @@ async def lifespan(app: FastAPI):
     global voice_room_manager
     voice_room_manager = RoomSessionManager(pool, ttl_minutes=30)
     
-    # Start background scheduler in a SEPARATE thread with its own event loop
-    # to isolate from uvicorn's event loop (which crashes when scheduler runs)
-    import threading as _threading
-    _scheduler_thread = _threading.Thread(
-        target=_run_scheduler_loop, daemon=True, name="scheduler"
-    )
-    _scheduler_thread.start()
+    # Start background scheduler as an asyncio task in the main event loop
+    _scheduler_task = asyncio.create_task(_scheduler_main(), name="scheduler")
+    _scheduler_task.add_done_callback(_handle_task_exception)
 
     # CardDAV startup sync — guarded: skip if CalDAV not configured
     if settings.caldav_username and settings.caldav_password:
@@ -179,7 +139,7 @@ async def lifespan(app: FastAPI):
             log.warning("Telegram command registration error: %s", e)
     
     yield
-    # Close database pool (scheduler thread exits automatically when process shuts down)
+    # Close database pool (scheduler task is cancelled automatically by event loop shutdown)
     try:
         await db.close_pool()
     except Exception as e:
