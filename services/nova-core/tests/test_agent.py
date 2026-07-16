@@ -204,8 +204,8 @@ async def test_per_iteration_timing_captured():
             tool_calls = [c for c in mock_push.call_args_list if c[0][0] == "test_timing_tool"]
             assert len(llm_calls) >= 1, "push_progress should be called for LLM step"
             assert len(tool_calls) >= 1, "push_progress should be called for tool step"
-            # elapsed_s should be a positive float
-            assert llm_calls[0][0][1] > 0, "LLM elapsed_s should be positive"
+            # elapsed_s should be a non-negative float (0 for instant mock, >0 in reality)
+            assert llm_calls[0][0][1] >= 0, "LLM elapsed_s should be non-negative"
 
             # Verify insert_agent_traces was called with enriched trace
             assert mock_insert.called, "insert_agent_traces should be called"
@@ -213,7 +213,7 @@ async def test_per_iteration_timing_captured():
             assert isinstance(trace_arg.turn_id, str) and trace_arg.turn_id != ""
             assert len(trace_arg.iterations) >= 1
 
-            # Verify timing values in the iteration
+            # Verify timing values in the iteration (0 for instant mock calls)
             it = trace_arg.iterations[0]
             assert it["iteration_num"] == 1
             assert it["llm_time_ms"] >= 0
