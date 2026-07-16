@@ -789,6 +789,12 @@ body {
     font-size: 0.8rem;
 }
 
+.status-pending {
+    color: var(--accent-color);
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
 /* Scrollbar styling for audit feed */
 .audit-feed::-webkit-scrollbar {
     width: 4px;

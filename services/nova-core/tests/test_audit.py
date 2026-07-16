@@ -221,8 +221,8 @@ async def test_run_agent_records_audit_on_tool_call():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_records_denied_confirmation():
-    """Verify agent records audit with status='denied' when confirmation is rejected."""
+async def test_run_agent_records_pending_confirmation():
+    """Verify agent records audit with status='pending_confirmation' when confirmation is required."""
     from app.agent import run_agent
     from app.tools.base import tool, TOOLS
     import json
@@ -261,12 +261,12 @@ async def test_run_agent_records_denied_confirmation():
             # Should return a confirmation required message
             assert "[CONFIRMATION_REQUIRED]" in resp
 
-            # record_tool_call should have been called with status="denied"
+            # record_tool_call should have been called with status="pending_confirmation"
             mock_record.assert_called_once()
             call_kwargs = mock_record.call_args.kwargs
             assert call_kwargs["user_name"] == "Meral"
             assert call_kwargs["tool_name"] == "create_event"
-            assert call_kwargs["status"] == "denied"
+            assert call_kwargs["status"] == "pending_confirmation"
             assert call_kwargs["confirmation_required"] is True
 
     finally:

@@ -406,8 +406,8 @@ function updateAudit(entries) {
     entries.forEach(entry => {
         const ts = entry.timestamp ? new Date(entry.timestamp) : new Date();
         const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
-        const statusClass = entry.status === 'denied' ? 'status-denied' : 'status-completed';
-        const statusLabel = entry.status === 'denied' ? '\u{1F6AB} Denied' : '\u2705 Done';
+        const statusClass = entry.status === 'denied' ? 'status-denied' : entry.status === 'pending_confirmation' ? 'status-pending' : 'status-completed';
+        const statusLabel = entry.status === 'denied' ? '\u{1F6AB} Denied' : entry.status === 'pending_confirmation' ? '\u23F3 Pending' : '\u2705 Done';
         const confirmIcon = entry.confirmation_required ? '\u{1F6E1}\uFE0F ' : '';
         html += `<tr>
             <td class="audit-time">${timeStr}</td>

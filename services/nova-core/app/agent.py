@@ -140,6 +140,47 @@ async def run_agent(
 
     messages.append({"role": "user", "content": user_message})
 
+    # CONFIRM-02: Auto-confirm from pending dict for channels that don't pass history.
+    # When the LLM has no context (history=None), it won't regenerate a tool call
+    # on the confirmation turn. Execute the stored tool directly instead.
+    if not history:
+        _now_c = time.monotonic()
+        for _k in list(_pending_confirmations):
+            if _now_c - _pending_confirmations[_k]["timestamp"] > _PENDING_CONFIRMATION_TTL:
+                del _pending_confirmations[_k]
+        for _k in list(_pending_confirmations):
+            _parts = _k.split(":", 2)
+            if len(_parts) == 3:
+                _u, _c, _fn = _parts
+                if _u == user and _c == channel:
+                    if _is_confirmed(user_message):
+                        entry = _pending_confirmations.pop(_k)
+                        _latency = int((time.monotonic() - _start) * 1000)
+                        _tool_records.append({"name": entry["fn"], "status": "completed", "duration_ms": 0})
+                        await record_tool_call(
+                            user_name=user,
+                            tool_name=entry["fn"],
+                            action_summary=_summarize_action(entry["fn"], entry["args"]),
+                            status="completed",
+                            confirmation_required=True,
+                        )
+                        if settings.nova_tracing_enabled:
+                            asyncio.create_task(emit_trace(AgentTrace(
+                                channel=channel, user=user, latency_ms=_latency,
+                                token_count=0, tool_calls=_tool_records,
+                                errors=[], iteration_count=1,
+                                got_stuck=False,
+                                timestamp=datetime.now(timezone.utc).isoformat(),
+                            )))
+                        try:
+                            result = await tools.call_tool(entry["fn"], entry["args"], user=user)
+                        except Exception as e:
+                            result = f"error: {e}"
+                        return result
+                    tokens = set(re.findall(r"[a-z']+", user_message.strip().lower()))
+                    if tokens & _DENY_WORDS:
+                        del _pending_confirmations[_k]
+
     specs = tools.tool_specs()
 
     try:
@@ -207,16 +248,18 @@ async def run_agent(
                                     del _pending_confirmations[_confirm_key]
                             else:
                                 detail = args.get("title") or args.get("content_pattern") or ""
-                                _pending_confirmations[_confirm_key] = {"detail": detail, "timestamp": _now_c}
+                                _pending_confirmations[_confirm_key] = {
+                                    "fn": fn_name, "args": args, "detail": detail, "timestamp": _now_c,
+                                }
 
                         if not confirmed:
-                            # Record denied confirmation before early return
-                            _tool_records.append({"name": fn_name, "status": "denied", "duration_ms": 0})
+                            # Record pending confirmation before early return
+                            _tool_records.append({"name": fn_name, "status": "pending_confirmation", "duration_ms": 0})
                             await record_tool_call(
                                 user_name=user,
                                 tool_name=fn_name,
                                 action_summary=_summarize_action(fn_name, args),
-                                status="denied",
+                                status="pending_confirmation",
                                 confirmation_required=True,
                             )
                             _latency = int((time.monotonic() - _start) * 1000)
