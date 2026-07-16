@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import admin_models, llm, db
 from .agent import run_agent
-from .config import get_active_model_sync, set_active_model, settings
+from .config import get_active_model, set_active_model, settings
 from .models import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice, RequestCodeRequest, VerifyCodeRequest, BriefingSettingsRequest, DNDSettingsRequest, LinkWhatsAppStartRequest, LinkWhatsAppVerifyRequest, LinkTelegramStartRequest, LinkTelegramVerifyRequest, DashboardChatRequest, ModelSwitchRequest, ModelPullRequest, ModelDeleteRequest, validate_model_name
 from .security import verify_whatsapp_signature, verify_telegram_signature
 from .channels.whatsapp import process_incoming_whatsapp, send_whatsapp_otp
@@ -710,7 +710,7 @@ async def _check_ollama() -> dict:
             }
 
         local_models = await admin_models.list_models()
-        active_model = get_active_model_sync()
+        active_model = await get_active_model()
         loading_model = admin_models.get_loading_model()
 
         # Auto-clear: if the loading model is now listed locally, clear the
@@ -1056,7 +1056,7 @@ async def admin_stream():
                 t.status in ("pending", "downloading", "extracting")
                 for t in active_pulls
             )
-            await asyncio.sleep(5 if has_active else 45)
+            await asyncio.sleep(5 if has_active else 15)
 
     return StreamingResponse(
         event_generator(),
@@ -1108,7 +1108,7 @@ async def admin_model_switch(req: ModelSwitchRequest):
     if not any(m.get("name") == req.model for m in local):
         raise HTTPException(status_code=404, detail=f"Model '{req.model}' not found locally")
 
-    old_model = get_active_model_sync()
+    old_model = await get_active_model()
 
     # Persist the new model
     await set_active_model(req.model)
@@ -1170,7 +1170,7 @@ async def admin_model_delete(req: ModelDeleteRequest):
         raise HTTPException(status_code=400, detail="Invalid model name")
 
     # Block active model deletion (backend enforcement — D-14)
-    if req.model == get_active_model_sync():
+    if req.model == (await get_active_model()):
         raise HTTPException(
             status_code=400,
             detail="Cannot delete the active model. Switch to another model first.",

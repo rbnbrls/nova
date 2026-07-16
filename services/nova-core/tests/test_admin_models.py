@@ -102,7 +102,7 @@ def test_model_switch_persists(client):
     with patch("app.main.admin_models.list_models", new_callable=AsyncMock) as m_list, \
          patch("app.main.admin_models.load_model", new_callable=AsyncMock) as m_load, \
          patch("app.main.set_active_model", new_callable=AsyncMock) as m_set, \
-         patch("app.main.get_active_model_sync") as m_get:
+         patch("app.main.get_active_model", new_callable=AsyncMock) as m_get:
         m_list.return_value = [{"name": "qwen3:14b"}]
         m_load.return_value = True
         m_get.return_value = "qwen3:14b"
@@ -120,7 +120,7 @@ def test_model_switch_rollback_on_failure(client):
     with patch("app.main.admin_models.list_models", new_callable=AsyncMock) as m_list, \
          patch("app.main.admin_models.load_model", new_callable=AsyncMock) as m_load, \
          patch("app.main.set_active_model", new_callable=AsyncMock) as m_set, \
-         patch("app.main.get_active_model_sync") as m_get:
+         patch("app.main.get_active_model", new_callable=AsyncMock) as m_get:
         m_list.return_value = [{"name": "gemma4:12b"}]
         m_load.return_value = False
         m_get.side_effect = ["qwen3:14b", "qwen3:14b"]  # old_model stays same
@@ -189,7 +189,7 @@ def test_model_pull_rejects_concurrent(client):
 def test_model_delete(client):
     """POST valid, non-active model returns {status: deleted}."""
     with patch("app.main.admin_models.delete_model", new_callable=AsyncMock) as m_del, \
-         patch("app.main.get_active_model_sync") as m_active:
+         patch("app.main.get_active_model", new_callable=AsyncMock) as m_active:
         m_del.return_value = {"status": "deleted"}
         m_active.return_value = "qwen3:14b"  # delete different model
         resp = client.post("/admin/model/delete", json={"model": "gemma4:12b"})
@@ -201,7 +201,7 @@ def test_model_delete(client):
 
 def test_model_delete_blocks_active(client):
     """POST delete on the active model returns 400 (D-14 backend enforcement)."""
-    with patch("app.main.get_active_model_sync") as m_active:
+    with patch("app.main.get_active_model", new_callable=AsyncMock) as m_active:
         m_active.return_value = "qwen3:14b"
         resp = client.post("/admin/model/delete", json={"model": "qwen3:14b"})
     assert resp.status_code == 400
@@ -218,7 +218,7 @@ def test_model_delete_validates_name(client):
 def test_model_delete_no_auth(client):
     """POST delete without auth returns 200 (LAN trust, D-15)."""
     with patch("app.main.admin_models.delete_model", new_callable=AsyncMock) as m_del, \
-         patch("app.main.get_active_model_sync") as m_active:
+         patch("app.main.get_active_model", new_callable=AsyncMock) as m_active:
         m_del.return_value = {"status": "deleted"}
         m_active.return_value = "qwen3:14b"
         resp = client.post(
@@ -289,7 +289,7 @@ async def test_check_ollama_extended():
          patch("app.main.settings") as m_settings, \
          patch("app.main.admin_models.list_models", new_callable=AsyncMock) as m_list, \
          patch("app.main.admin_models.get_loading_model") as m_loading, \
-         patch("app.main.get_active_model_sync") as m_active:
+         patch("app.main.get_active_model", new_callable=AsyncMock) as m_active:
         m_ready.return_value = True
         m_settings.ollama_base_url = "http://ollama:11434"
         m_list.return_value = [{"name": "qwen3:14b"}]
@@ -310,7 +310,7 @@ async def test_check_ollama_loading_state():
          patch("app.main.settings") as m_settings, \
          patch("app.main.admin_models.list_models", new_callable=AsyncMock) as m_list, \
          patch("app.main.admin_models.get_loading_model") as m_loading, \
-         patch("app.main.get_active_model_sync") as m_active:
+         patch("app.main.get_active_model", new_callable=AsyncMock) as m_active:
         m_ready.return_value = True
         m_settings.ollama_base_url = "http://ollama:11434"
         # loading model is NOT in local list — so auto-clear does not fire

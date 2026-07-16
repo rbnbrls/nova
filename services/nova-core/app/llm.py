@@ -9,7 +9,7 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-from .config import get_active_model_sync, settings
+from .config import get_active_model, settings
 
 # Kept well below agent.py's whole-turn asyncio.timeout(60) so a slow-but-alive
 # Ollama can still be retried at least once within the turn's overall budget.
@@ -45,7 +45,7 @@ async def chat(
     Token counts are extracted from the Ollama response top-level fields.
     """
     payload: dict = {
-        "model": model or get_active_model_sync(),
+        "model": model or (await get_active_model()),
         "messages": messages,
         "stream": False,
     }

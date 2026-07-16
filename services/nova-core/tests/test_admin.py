@@ -146,7 +146,7 @@ async def test_check_ollama():
          patch("app.main.settings") as mock_settings, \
          patch("app.main.admin_models.list_models", new_callable=AsyncMock) as mock_list, \
          patch("app.main.admin_models.get_loading_model") as mock_loading, \
-         patch("app.main.get_active_model_sync") as mock_active:
+         patch("app.main.get_active_model", new_callable=AsyncMock) as mock_active:
         mock_ready.return_value = True
         mock_settings.nova_model = "qwen3:14b"
         mock_settings.ollama_base_url = "http://localhost:11434"
