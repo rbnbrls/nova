@@ -27,6 +27,8 @@ from fastapi import FastAPI, Request, Query, BackgroundTasks, Response, HTTPExce
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+import httpx
+
 from . import admin_models, llm, db
 from .agent import run_agent
 from .config import get_active_model, set_active_model, settings
@@ -733,11 +735,20 @@ async def _check_ollama() -> dict:
             },
             "models": local_models,
         }
-    except Exception as exc:
-        log.warning("admin _check_ollama failed: %s", exc)
+    except asyncio.CancelledError:
+        log.warning("admin _check_ollama cancelled (timeout after 5s)")
         return {
             "status": "down",
-            "detail": f"Ollama not responding at {host}",
+            "detail": f"Ollama check timed out at {host}",
+            "host": host,
+            "model": {"active": "", "loading": False, "loading_name": ""},
+            "models": [],
+        }
+    except Exception as exc:
+        log.warning("admin _check_ollama failed: %s: %s", type(exc).__name__, exc)
+        return {
+            "status": "down",
+            "detail": f"Ollama check error: {type(exc).__name__}",
             "host": host,
             "model": {"active": "", "loading": False, "loading_name": ""},
             "models": [],
@@ -887,7 +898,6 @@ async def _check_gpu() -> dict:
                 gpu_util = int(parts[4]) if parts[4].isdigit() else 0
                 vram_pct = (vram_used / vram_total * 100) if vram_total > 0 else 0
 
-                # Also query Ollama for loaded models in VRAM
                 loaded = "N/A"
                 try:
                     async with httpx.AsyncClient(timeout=3) as client:
@@ -900,7 +910,7 @@ async def _check_gpu() -> dict:
                 except Exception:
                     pass
 
-                detail = f"{name} · {vram_used}/{vram_total} MB · {gpu_util}%"
+                detail = f"{name} \u00b7 {vram_used}/{vram_total} MB \u00b7 {gpu_util}%"
                 return {
                     "status": "ok",
                     "detail": detail,
@@ -915,35 +925,54 @@ async def _check_gpu() -> dict:
     except FileNotFoundError:
         pass
     except Exception as exc:
-        log.warning("admin _check_gpu failed: %s", exc)
+        log.warning("admin _check_gpu nvidia-smi failed: %s: %s", type(exc).__name__, exc)
 
     # Fallback: try Ollama /api/ps for loaded model info
-    try:
-        async with httpx.AsyncClient(timeout=3) as client:
-            ps = await client.get(f"{settings.ollama_base_url}/api/ps")
-            if ps.status_code == 200:
-                data = ps.json()
-                models = data.get("models", [])
-                if models:
-                    loaded = ", ".join(m["name"] for m in models)
-                    total_vram = sum(m.get("size_vram", 0) for m in models) // (1024 * 1024)
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                ps = await client.get(f"{settings.ollama_base_url}/api/ps")
+                if ps.status_code == 200:
+                    data = ps.json()
+                    models = data.get("models", [])
+                    if models:
+                        loaded = ", ".join(m["name"] for m in models)
+                        total_vram = sum(m.get("size_vram", 0) for m in models) // (1024 * 1024)
+                        detail = f"Ollama loaded: {loaded} ({total_vram} MB VRAM)" if total_vram else f"Ollama loaded: {loaded}"
+                        return {
+                            "status": "ok",
+                            "detail": detail,
+                            "gpu_name": "N/A (no nvidia-smi)",
+                            "vram_total_mb": "N/A",
+                            "vram_used_mb": total_vram or "N/A",
+                            "vram_pct": "N/A",
+                            "gpu_temp_c": "N/A",
+                            "gpu_util_pct": "N/A",
+                            "loaded_models": loaded,
+                        }
+                    # Ollama responded but no models loaded — report as available
                     return {
                         "status": "ok",
-                        "detail": f"Ollama loaded: {loaded} ({total_vram} MB VRAM)" if total_vram else f"Ollama loaded: {loaded}",
+                        "detail": "Ollama reachable (no models loaded in VRAM)",
                         "gpu_name": "N/A (no nvidia-smi)",
                         "vram_total_mb": "N/A",
-                        "vram_used_mb": total_vram or "N/A",
+                        "vram_used_mb": "N/A",
                         "vram_pct": "N/A",
                         "gpu_temp_c": "N/A",
                         "gpu_util_pct": "N/A",
-                        "loaded_models": loaded,
+                        "loaded_models": "none",
                     }
-    except Exception:
-        pass
+        except httpx.RequestError:
+            if attempt == 0:
+                await asyncio.sleep(1)
+                continue
+        except Exception:
+            pass
+        break
 
     return {
         "status": "down",
-        "detail": "GPU stats unavailable (no nvidia-smi /api/ps)",
+        "detail": "GPU stats unavailable",
         "gpu_name": "N/A",
         "vram_total_mb": "N/A",
         "vram_used_mb": "N/A",
@@ -961,21 +990,31 @@ async def _collect_admin_status() -> dict:
     not abort the others (D-02 isolation).  Each check is capped at 5s via
     asyncio.wait_for so a hung backend adds ≈5s to the cycle rather than
     blocking the SSE generator indefinitely (T-40-06).
+
+    Ollama gets an extended timeout (8s) because it runs 2–3 HTTP calls
+    (version, tags, ps) which can stall under GPU load.
     """
     checks = [
-        asyncio.wait_for(_check_ollama(), timeout=5),
+        asyncio.wait_for(_check_ollama(), timeout=8),
         asyncio.wait_for(_check_postgres(), timeout=5),
         asyncio.wait_for(_check_caldav(), timeout=5),
         asyncio.wait_for(_check_ha(), timeout=5),
         asyncio.wait_for(_check_imap(), timeout=5),
-        asyncio.wait_for(_check_gpu(), timeout=5),
+        asyncio.wait_for(_check_gpu(), timeout=8),
     ]
     results = await asyncio.gather(*checks, return_exceptions=True)
 
     keys = ("ollama", "postgres", "caldav", "ha", "email", "gpu")
     services: dict[str, dict] = {}
     for key, result in zip(keys, results):
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException) and not isinstance(result, Exception):
+            log.warning("admin %s check raised %s — likely cancellation", key, type(result).__name__)
+            services[key] = {
+                "status": "down",
+                "detail": f"{key} check was cancelled",
+                "host": "",
+            }
+        elif isinstance(result, Exception):
             log.warning("admin %s check raised: %s %s", key, type(result).__name__, result)
             services[key] = {
                 "status": "down",
