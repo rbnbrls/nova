@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     nova_max_turn_timeout: int = 120
     nova_tracing_enabled: bool = True
 
+    # Tracing / slowness thresholds
+    nova_slow_llm_ms: int = 15000   # LLM inference call exceeds this → slowness alert
+    nova_slow_tool_ms: int = 5000   # Single tool execution exceeds this → slowness alert
+    nova_slow_turn_ms: int = 30000  # Total agent turn exceeds this → slowness alert
+
     # LLM (Ollama)
     ollama_base_url: str = "http://ollama:11434"
     nova_model: str = "qwen2.5:7b"
