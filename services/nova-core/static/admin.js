@@ -411,3 +411,94 @@ document.addEventListener('DOMContentLoaded', () => {
 
     refreshModelList();
 });
+
+// --- Hamburger Menu Navigation ---
+
+function toggleNavMenu(forceState) {
+    const menu = document.getElementById('nav-menu');
+    const backdrop = document.getElementById('nav-backdrop');
+    const btn = document.getElementById('btn-hamburger');
+    if (!menu || !backdrop || !btn) return;
+
+    const isOpen = forceState !== undefined ? forceState : !menu.classList.contains('visible');
+
+    menu.classList.toggle('visible', isOpen);
+    backdrop.classList.toggle('visible', isOpen);
+    btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    btn.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
+
+    if (isOpen) {
+        const firstItem = menu.querySelector('.nav-item');
+        if (firstItem) firstItem.focus();
+        document.body.style.overflow = 'hidden';
+    } else {
+        btn.focus();
+        document.body.style.overflow = '';
+    }
+}
+
+function closeNavMenu() {
+    toggleNavMenu(false);
+}
+
+function initNavMenu() {
+    const menu = document.getElementById('nav-menu');
+    const backdrop = document.getElementById('nav-backdrop');
+    const btn = document.getElementById('btn-hamburger');
+    if (!menu || !backdrop || !btn) return;
+
+    // Remove hidden class so CSS transitions work (element is invisible via translateX/opacity)
+    menu.classList.remove('hidden');
+    backdrop.classList.remove('hidden');
+
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleNavMenu();
+    });
+
+    backdrop.addEventListener('click', closeNavMenu);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && menu.classList.contains('visible')) {
+            closeNavMenu();
+        }
+    });
+
+    menu.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const navType = item.getAttribute('data-nav-type');
+
+            if (navType === 'page' || navType === 'back') {
+                closeNavMenu();
+            } else if (navType === 'scroll') {
+                const targetId = item.getAttribute('data-scroll-to');
+                if (targetId) {
+                    const target = document.getElementById(targetId);
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }
+            } else if (navType === 'modal') {
+                // Admin page has no settings modal — navigate to dashboard
+                window.location.href = '/dashboard';
+            }
+        });
+    });
+
+    menu.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        const focusable = menu.querySelectorAll('.nav-item');
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initNavMenu);
