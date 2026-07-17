@@ -121,6 +121,7 @@ _active_model_override: str | None = None
 
 async def get_active_model() -> str:
     """Return active model from app_config, falling back to env default."""
+    global _active_model_override
     if _active_model_override:
         return _active_model_override
     try:
