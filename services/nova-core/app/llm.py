@@ -48,6 +48,7 @@ async def chat(
         "model": model or (await get_active_model()),
         "messages": messages,
         "stream": False,
+        "keep_alive": "-1m",
     }
     if tools:
         payload["tools"] = tools
