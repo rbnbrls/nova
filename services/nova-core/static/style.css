@@ -2109,3 +2109,86 @@ body {
     border-radius: 2px;
 }
 
+/* Phase 1 — Mobile Dashboard View for iPhones */
+@media (max-width: 480px) {
+    .dashboard-container {
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .glass-panel {
+        border-radius: 16px;
+    }
+
+    .dashboard-card {
+        padding: 1rem;
+        min-height: auto;
+    }
+
+    .card-header {
+        padding-bottom: 0.75rem;
+    }
+
+    .chat-panel {
+        margin-top: 1rem;
+    }
+
+    .audit-panel {
+        margin-top: 1rem;
+    }
+
+    .traces-panel {
+        margin-top: 1rem;
+    }
+
+    .chat-input-row {
+        gap: 0.5rem;
+    }
+
+    .chat-input-row input {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .chat-input-row .btn-mic {
+        width: 44px;
+        height: 44px;
+        flex-shrink: 0;
+        font-size: 1.2rem;
+    }
+
+    #chat-btn-send {
+        min-height: 44px;
+        white-space: nowrap;
+        padding: 0 1rem;
+        flex-shrink: 0;
+    }
+
+    .chat-user-tab {
+        min-height: 44px;
+    }
+
+    .settings-cog-btn {
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-content {
+        min-width: auto;
+        width: 90vw;
+        max-width: 400px;
+    }
+
+    .modal-user-tab {
+        min-height: 44px;
+    }
+
+    .label-filter-pill {
+        min-height: 44px;
+        padding: 0.4rem 0.6rem;
+    }
+}
+
