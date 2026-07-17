@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 import zoneinfo
 
-from fastapi import FastAPI, Request, Query, BackgroundTasks, Response, HTTPException
+from fastapi import FastAPI, Request, Query, BackgroundTasks, Response, HTTPException, File, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -44,6 +44,7 @@ from .tools.email import _get_imap_connection
 from .tools.home_assistant import _ha_get
 from .voice_rooms import RoomSessionManager
 from .contacts_sync import sync_all_contacts as _carddav_sync_all
+from . import whisper
 
 from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, check_at_risk_tasks, run_briefing_scheduler, process_queued_notifications, purge_old_audit_logs, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
 from .progress import get_progress_queue
@@ -1409,6 +1410,39 @@ async def dashboard_chat(req: DashboardChatRequest) -> dict:
         log.debug("Could not fetch trace for dashboard chat", exc_info=True)
 
     return result
+
+
+@app.post("/dashboard/transcribe")
+async def dashboard_transcribe(audio: UploadFile = File(...)) -> dict:
+    """Transcribe audio using wyoming-whisper.
+    
+    Accepts a WAV file upload, extracts raw PCM, sends it to the
+    local wyoming-whisper service via the Wyoming protocol, and
+    returns the transcription text.
+    """
+    if not audio.content_type or not audio.content_type.startswith("audio/"):
+        raise HTTPException(status_code=400, detail="Only audio files are supported")
+
+    try:
+        wav_data = await audio.read()
+        if len(wav_data) < 44:
+            raise HTTPException(status_code=400, detail="Audio file too small or invalid")
+
+        pcm_data, sample_rate = whisper.wav_to_pcm(wav_data)
+        transcript = await whisper.transcribe_audio(pcm_data, sample_rate)
+
+        if not transcript:
+            raise HTTPException(
+                status_code=502,
+                detail="Transcription failed — whisper returned empty result",
+            )
+
+        return {"transcript": transcript}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("Dashboard transcription error: %s: %s", type(exc).__name__, exc)
+        raise HTTPException(status_code=500, detail="Transcription processing failed")
 
 
 @app.post("/dashboard/link-whatsapp/start")
