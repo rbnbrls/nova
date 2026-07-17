@@ -175,6 +175,7 @@
             <div class="chat-reply-area" id="chat-reply-area">
                 <div class="placeholder-loader" id="chat-empty">Ask Nova something...</div>
             </div>
+            <div class="chat-loading hidden" id="chat-loading-indicator"></div>
             <div class="chat-input-row">
                 <button class="btn btn-mic" id="chat-btn-mic" type="button" title="Hold to speak" aria-label="Hold to speak to Nova" disabled>🎤</button>
                 <input type="text" id="chat-input" placeholder="Ask Nova something..." autocomplete="off" />
@@ -235,6 +236,17 @@
                 </div>
             </div>
         </div>
+
+        <!-- Traces Panel: Phase 1 — Response Time Monitoring -->
+        <section class="dashboard-card glass-panel traces-panel" id="traces-panel">
+            <div class="card-header">
+                <h2>Response Times</h2>
+                <span class="badge badge-accent" id="traces-count">0</span>
+            </div>
+            <div class="traces-content" id="traces-content">
+                <div class="placeholder-loader">Waiting for agent traces...</div>
+            </div>
+        </section>
 
         <!-- Telegram Linking Modal -->
         <div id="link-telegram-modal" class="modal-overlay hidden">
