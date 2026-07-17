@@ -18,6 +18,7 @@ eventSource.onmessage = function(event) {
         updateTasks(data.tasks);
         updateEvents(data.events);
         updateAudit(data.audit);
+        if (typeof renderTraces === 'function') renderTraces(data.traces);
         document.querySelector('.status-text').textContent = 'Live Connected';
         document.querySelector('.pulse-dot').style.backgroundColor = '#10b981';
     } catch (e) {
@@ -531,7 +532,6 @@ function toggleTraceDetail(traceId) {
     var row = document.getElementById(detailId);
     if (row) row.classList.toggle('hidden');
 }
-
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;

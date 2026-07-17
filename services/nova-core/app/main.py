@@ -619,6 +619,12 @@ async def dashboard_stream():
                     payload["plan"] = []
 
                 try:
+                    traces_data = await dashboard_traces(limit=20)
+                    payload["traces"] = traces_data["traces"]
+                except Exception:
+                    payload["traces"] = []
+
+                try:
                     from .replanning import get_at_risk_tasks as _get_at_risk, compute_next_best_action as _compute_nba
                     risk_by_user = {}
                     for u in ("Ruben", "Meral"):

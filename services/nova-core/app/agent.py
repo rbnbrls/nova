@@ -246,7 +246,9 @@ async def run_agent(
                         timestamp=datetime.now(timezone.utc).isoformat(),
                     ))
 
-                    return (result.message.get("content") or "").strip()
+                    _reply = (result.message.get("content") or "").strip()
+                    _reply += f" ({_latency / 1000:.1f}s)"
+                    return _reply
 
                 # Execute each requested tool and feed results back to the model.
                 for call in tool_calls:
