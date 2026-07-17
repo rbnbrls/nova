@@ -18,6 +18,7 @@ eventSource.onmessage = function(event) {
         updateTasks(data.tasks);
         updateEvents(data.events);
         updateAudit(data.audit);
+        updateTraces(data.traces);
         document.querySelector('.status-text').textContent = 'Live Connected';
         document.querySelector('.pulse-dot').style.backgroundColor = '#10b981';
     } catch (e) {
@@ -427,6 +428,52 @@ function updateAudit(entries) {
             <td class="audit-action">${confirmIcon}${escapeHtml(entry.action_summary)}</td>
             <td class="audit-status"><span class="${statusClass}">${statusLabel}</span></td>
         </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// Render Response Times Feed
+function updateTraces(traces) {
+    const container = document.getElementById('traces-content');
+    const countBadge = document.getElementById('traces-count');
+
+    if (!traces || traces.length === 0) {
+        container.innerHTML = '<div class="placeholder-loader">No agent traces yet.</div>';
+        if (countBadge) countBadge.textContent = '0';
+        return;
+    }
+
+    if (countBadge) countBadge.textContent = traces.length;
+
+    let html = '<table class="audit-table"><thead><tr><th>Time</th><th>User</th><th>Ch</th><th>Latency</th><th>Tokens</th><th>Iter</th><th>Status</th></tr></thead><tbody>';
+    traces.forEach(t => {
+        const ts = t.created_at ? new Date(t.created_at) : new Date();
+        const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+        const latencySec = (t.total_latency_ms / 1000).toFixed(1);
+        const statusLabel = t.got_stuck ? '\u26A0\uFE0F Stuck' : t.error_count > 0 ? '\u274C Errors' : '\u2705 OK';
+        const statusClass = t.got_stuck ? 'status-pending' : t.error_count > 0 ? 'status-denied' : 'status-completed';
+        html += `<tr>
+            <td class="audit-time">${timeStr}</td>
+            <td class="audit-user">${escapeHtml(t.user || '')}</td>
+            <td>${escapeHtml(t.channel || '')}</td>
+            <td><strong>${latencySec}s</strong></td>
+            <td>${t.token_count || 0}</td>
+            <td>${t.iteration_count || 0}</td>
+            <td class="audit-status"><span class="${statusClass}">${statusLabel}</span></td>
+        </tr>`;
+
+        // Per-iteration breakdown if available
+        if (t.iterations && t.iterations.length > 1) {
+            t.iterations.forEach(it => {
+                const llmS = (it.llm_time_ms / 1000).toFixed(1);
+                const toolS = (it.tool_time_ms / 1000).toFixed(1);
+                html += `<tr class="trace-iteration-row"><td colspan="7" style="padding-left:2rem;font-size:0.8em;color:var(--text-secondary);">
+                    Iter #${it.iteration_num}: LLM ${llmS}s${it.tool_name ? ' / ' + escapeHtml(it.tool_name) + ' ' + toolS + 's' : ''}
+                    ${it.prompt_tokens || it.completion_tokens ? ' (' + (it.prompt_tokens||0) + '/' + (it.completion_tokens||0) + ' tokens)' : ''}
+                </td></tr>`;
+            });
+        }
     });
     html += '</tbody></table>';
     container.innerHTML = html;
