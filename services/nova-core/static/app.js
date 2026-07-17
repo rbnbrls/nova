@@ -25,12 +25,31 @@ eventSource.onmessage = function(event) {
     }
 };
 
+// Periodic trace fetch (independent from SSE poll cadence)
+fetchTraces();
+setInterval(fetchTraces, 30000);
+
 eventSource.addEventListener('progress', function(event) {
     try {
         const data = JSON.parse(event.data);
         const indicator = document.getElementById('chat-loading-indicator');
-        if (indicator) {
-            indicator.textContent = data.step + ' (' + data.elapsed_s + 's)';
+        if (indicator && data.step && data.elapsed_s !== undefined) {
+            const stepNames = {
+                'llm': 'Nova is thinking',
+                'add_task': 'Adding task',
+                'complete_task': 'Completing task',
+                'create_event': 'Creating event',
+                'update_event': 'Updating event',
+                'delete_event': 'Deleting event',
+                'ha_call_service': 'Controlling home',
+                'remember': 'Remembering',
+                'forget': 'Forgetting',
+                'send_email': 'Sending email',
+                'read_email': 'Reading email',
+            };
+            const pretty = stepNames[data.step] || data.step.replace(/_/g, ' ');
+            indicator.textContent = pretty + ' (' + data.elapsed_s + 's)';
+            indicator.classList.remove('hidden');
         }
     } catch (e) {
         console.error('Failed to parse progress event:', e);
@@ -430,6 +449,87 @@ function updateAudit(entries) {
     });
     html += '</tbody></table>';
     container.innerHTML = html;
+}
+
+// --- Traces Panel: Response Time Monitoring ---
+let lastTracesData = [];
+
+async function fetchTraces() {
+    try {
+        const resp = await fetch('/dashboard/traces?limit=15');
+        if (resp.ok) {
+            const data = await resp.json();
+            renderTraces(data.traces || []);
+        }
+    } catch (e) {
+        console.error('Failed to fetch traces:', e);
+    }
+}
+
+function renderTraces(traces) {
+    const container = document.getElementById('traces-content');
+    const countBadge = document.getElementById('traces-count');
+    if (!container) return;
+
+    lastTracesData = traces;
+
+    if (!traces || traces.length === 0) {
+        container.innerHTML = '<div class="placeholder-loader">No agent traces yet.</div>';
+        if (countBadge) countBadge.textContent = '0';
+        return;
+    }
+
+    if (countBadge) countBadge.textContent = traces.length;
+
+    let html = '<table class="traces-table"><thead><tr><th>Time</th><th>User</th><th>Total</th><th>Iters</th><th>Breakdown</th></tr></thead><tbody>';
+    traces.forEach(function(trace) {
+        const ts = trace.created_at ? new Date(trace.created_at) : new Date();
+        const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+        const totalSec = (trace.total_latency_ms / 1000).toFixed(1);
+        const stuckClass = trace.got_stuck ? ' trace-stuck' : '';
+        const errClass = trace.error_count > 0 ? ' trace-error' : '';
+
+        html += '<tr class="trace-turn' + stuckClass + errClass + '" onclick="toggleTraceDetail(\'' + escapeHtml(trace.id) + '\')">';
+        html += '<td class="trace-time">' + timeStr + '</td>';
+        html += '<td class="trace-user">' + escapeHtml(trace.user) + '</td>';
+        html += '<td class="trace-total">' + totalSec + 's</td>';
+        html += '<td class="trace-iters">' + (trace.iteration_count || 1) + '</td>';
+        html += '<td class="trace-toggle">' + (trace.got_stuck ? '\u26A0\uFE0F' : '\u25BC') + '</td>';
+        html += '</tr>';
+
+        // Detail row (hidden by default, shown via toggleTraceDetail)
+        if (trace.iterations && trace.iterations.length) {
+            var detailId = 'trace-detail-' + trace.id.replace(/[^a-zA-Z0-9]/g, '');
+            html += '<tr id="' + detailId + '" class="trace-detail-row hidden">';
+            html += '<td colspan="5"><div class="trace-detail-inner">';
+            html += '<div class="trace-summary">' + trace.token_count + ' tokens total';
+            if (trace.error_count > 0) html += ' \u00B7 ' + trace.error_count + ' error(s)';
+            html += '</div>';
+            html += '<table class="trace-iter-table"><thead><tr><th>#</th><th>Step</th><th>LLM (s)</th><th>Tool (s)</th><th>Tool</th><th>Tokens</th></tr></thead><tbody>';
+            trace.iterations.forEach(function(it, idx) {
+                const llmSec = (it.llm_time_ms / 1000).toFixed(1);
+                const toolSec = it.tool_time_ms ? (it.tool_time_ms / 1000).toFixed(1) : '-';
+                const toolName = it.tool_name || '-';
+                html += '<tr>';
+                html += '<td>' + (idx + 1) + '</td>';
+                html += '<td>' + (toolName !== '-' ? 'Tool' : 'Final') + '</td>';
+                html += '<td class="timing-num' + (it.llm_time_ms > 10000 ? ' timing-slow' : '') + '">' + llmSec + '</td>';
+                html += '<td class="timing-num' + (it.tool_time_ms > 3000 ? ' timing-slow' : '') + '">' + toolSec + '</td>';
+                html += '<td>' + escapeHtml(toolName) + '</td>';
+                html += '<td class="timing-num">' + it.prompt_tokens + '\u2192' + it.completion_tokens + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table></div></td></tr>';
+        }
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function toggleTraceDetail(traceId) {
+    var detailId = 'trace-detail-' + traceId.replace(/[^a-zA-Z0-9]/g, '');
+    var row = document.getElementById(detailId);
+    if (row) row.classList.toggle('hidden');
 }
 
 function escapeHtml(text) {
@@ -1014,7 +1114,7 @@ async function handleChatSubmit() {
         });
         const data = await resp.json();
         if (resp.ok) {
-            updateChat(sentMessage, data.reply);
+            updateChat(sentMessage, data.reply, data.trace || null);
         } else {
             showChatError(data.detail || 'Something went wrong. Please try again.');
         }
@@ -1029,7 +1129,7 @@ async function handleChatSubmit() {
     }
 }
 
-function updateChat(userMessage, novaReply) {
+function updateChat(userMessage, novaReply, trace) {
     const area = document.getElementById('chat-reply-area');
     const emptyMsg = document.getElementById('chat-empty');
     if (emptyMsg) emptyMsg.style.display = 'none';
@@ -1046,7 +1146,38 @@ function updateChat(userMessage, novaReply) {
     // Nova reply — escapeHtml() prevents XSS from LLM-generated content
     const novaDiv = document.createElement('div');
     novaDiv.className = 'chat-message nova';
-    novaDiv.innerHTML = '<div class="chat-message-label">Nova</div><div class="chat-message-text">' + escapeHtml(novaReply) + '</div>';
+    let novaHtml = '<div class="chat-message-label">Nova</div><div class="chat-message-text">' + escapeHtml(novaReply) + '</div>';
+    // Append timing breakdown if available
+    if (trace) {
+        const total = trace.total_latency_ms || 0;
+        const iters = trace.iteration_count || 1;
+        novaHtml += '<div class="chat-timing">';
+        if (total > 1000) {
+            novaHtml += (total / 1000).toFixed(1) + 's total';
+        } else {
+            novaHtml += total + 'ms total';
+        }
+        novaHtml += ' \u00b7 ' + iters + ' iteration(s)';
+        if (trace.iterations && trace.iterations.length) {
+            novaHtml += '<span class="chat-timing-breakdown" onclick="this.classList.toggle(\'expanded\')"> \u25BC breakdown</span>';
+            novaHtml += '<div class="chat-timing-detail">';
+            trace.iterations.forEach(function(it, idx) {
+                const llmSec = (it.llm_time_ms / 1000).toFixed(1);
+                const toolSec = it.tool_time_ms ? (it.tool_time_ms / 1000).toFixed(1) : '-';
+                novaHtml += '<div class="timing-row">';
+                novaHtml += '<span class="timing-step">#' + (idx + 1) + '</span>';
+                novaHtml += '<span class="timing-llm">LLM ' + llmSec + 's</span>';
+                if (it.tool_name) {
+                    novaHtml += '<span class="timing-tool">' + escapeHtml(it.tool_name) + ' ' + toolSec + 's</span>';
+                }
+                novaHtml += '<span class="timing-tokens">' + it.prompt_tokens + '\u2192' + it.completion_tokens + ' tok</span>';
+                novaHtml += '</div>';
+            });
+            novaHtml += '</div>';
+        }
+        novaHtml += '</div>';
+    }
+    novaDiv.innerHTML = novaHtml;
     area.appendChild(novaDiv);
 
     // Scroll to bottom
@@ -1054,20 +1185,15 @@ function updateChat(userMessage, novaReply) {
 }
 
 function showChatLoading(visible) {
-    const area = document.getElementById('chat-reply-area');
-    const existing = document.getElementById('chat-loading-indicator');
+    const indicator = document.getElementById('chat-loading-indicator');
 
     if (visible) {
-        if (!existing) {
-            const div = document.createElement('div');
-            div.id = 'chat-loading-indicator';
-            div.className = 'chat-loading';
-            div.textContent = 'Nova is thinking...';
-            area.appendChild(div);
-            area.scrollTop = area.scrollHeight;
+        if (indicator) {
+            indicator.textContent = 'Nova is thinking...';
+            indicator.classList.remove('hidden');
         }
-    } else if (existing) {
-        existing.remove();
+    } else if (indicator) {
+        indicator.classList.add('hidden');
     }
 }
 
