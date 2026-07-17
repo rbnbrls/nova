@@ -2203,6 +2203,20 @@ body {
         background: var(--accent-color);
     }
 
+    .btn-success:hover {
+        background: var(--success-color);
+    }
+
+    .btn-secondary:hover {
+        background: transparent;
+        border-color: var(--border-color);
+    }
+
+    .settings-tab:hover {
+        background: transparent;
+        color: var(--text-secondary);
+    }
+
     .settings-cog-btn:hover {
         color: var(--text-secondary);
         background: none;
@@ -2218,7 +2232,67 @@ body {
         border-color: rgba(255, 255, 255, 0.1);
     }
 
+    .modal-user-tab:hover {
+        background: transparent;
+        color: var(--text-secondary);
+    }
+
+    .label-filter-pill:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        color: var(--text-secondary);
+    }
+
+    .todo-item:hover {
+        background: transparent;
+    }
+
+    .inline-reassign-btn:hover {
+        color: var(--text-secondary);
+    }
+
+    .task-detail-close:hover {
+        color: var(--text-primary);
+    }
+
+    .template-source:hover {
+        color: var(--accent-light);
+    }
+
+    .blocker-item:hover {
+        color: var(--accent-light);
+        text-decoration: none;
+    }
+
+    .audit-table tbody tr:hover {
+        background: transparent;
+    }
+
+    .traces-table tbody tr.trace-turn:hover {
+        background: transparent;
+    }
+
+    .chat-timing-breakdown:hover {
+        color: var(--accent-light);
+    }
+
+    .model-delete-btn:hover:not(:disabled) {
+        background: rgba(239, 68, 68, 0.15);
+    }
+
+    .btn-hamburger:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
     .nav-item:hover {
+        background: transparent;
+    }
+
+    .nav-item-external:hover {
+        background: transparent;
+    }
+
+    .nav-item-back:hover {
         background: transparent;
     }
 }
