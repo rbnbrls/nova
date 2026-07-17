@@ -1345,7 +1345,7 @@ async def dashboard_chat(req: DashboardChatRequest) -> dict:
     """Send a message to Nova from the dashboard and return the reply.
 
     Accepts { user, message }, runs the full agent loop, and returns
-    { reply }. Empty messages return 400. Agent loop failures return 502.
+    { reply, trace? }. Empty messages return 400. Agent loop failures return 502.
     """
     if not req.message or not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
@@ -1364,7 +1364,51 @@ async def dashboard_chat(req: DashboardChatRequest) -> dict:
             detail="Nova is having trouble right now. Please try again later.",
         )
 
-    return {"reply": reply}
+    result = {"reply": reply}
+
+    # Fetch the most recent trace for this user within the last 30s
+    try:
+        pool = await db.get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, total_latency_ms, token_count, iteration_count
+                FROM agent_turns
+                WHERE "user" = $1::text AND channel = 'dashboard'
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                req.user,
+            )
+            if row:
+                it_rows = await conn.fetch(
+                    """
+                    SELECT llm_time_ms, tool_time_ms, tool_name, prompt_tokens, completion_tokens
+                    FROM agent_iterations
+                    WHERE turn_id = $1::uuid
+                    ORDER BY iteration_num ASC
+                    """,
+                    row["id"],
+                )
+                result["trace"] = {
+                    "total_latency_ms": row["total_latency_ms"],
+                    "token_count": row["token_count"],
+                    "iteration_count": row["iteration_count"],
+                    "iterations": [
+                        {
+                            "llm_time_ms": it["llm_time_ms"],
+                            "tool_time_ms": it["tool_time_ms"],
+                            "tool_name": it["tool_name"] or "",
+                            "prompt_tokens": it["prompt_tokens"],
+                            "completion_tokens": it["completion_tokens"],
+                        }
+                        for it in it_rows
+                    ],
+                }
+    except Exception:
+        log.debug("Could not fetch trace for dashboard chat", exc_info=True)
+
+    return result
 
 
 @app.post("/dashboard/link-whatsapp/start")
