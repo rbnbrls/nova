@@ -1211,19 +1211,72 @@ function clearChatError() {
 }
 
 // --- Voice Input (press-and-hold mic button) ---
-// Records audio via MediaRecorder (universal browser support), converts to
-// 16 kHz mono WAV on the client, uploads to /dashboard/transcribe which
-// sends it to wyoming-whisper, then submits the transcript via the existing
-// /dashboard/chat path.
+// Records audio via MediaRecorder (HTTPS) or falls back to file upload (HTTP).
 (function initVoiceInput() {
     const btnMic = document.getElementById('chat-btn-mic');
     const chatInput = document.getElementById('chat-input');
     const chatBtnSend = document.getElementById('chat-btn-send');
     if (!btnMic || !chatInput || !chatBtnSend) return;
 
-    // Graceful degradation: leave disabled if MediaRecorder unavailable
-    if (!window.MediaRecorder || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    var canUseMediaRecorder = !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    var httpFallbackShown = false;
 
+    if (!canUseMediaRecorder) {
+        // --- HTTP fallback: file upload instead of live recording ---
+        btnMic.disabled = false;
+        btnMic.title = 'Select an audio file to transcribe';
+
+        var fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'audio/*';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+
+        fileInput.addEventListener('change', function () {
+            var file = fileInput.files[0];
+            if (!file) return;
+
+            btnMic.classList.add('recording');
+            chatInput.disabled = true;
+            chatBtnSend.disabled = true;
+            clearChatError();
+
+            var reader = new FileReader();
+            reader.onload = async function (e) {
+                var blob = new Blob([e.target.result], { type: file.type || 'audio/wav' });
+                await transcribeAndSubmit(blob);
+                btnMic.classList.remove('recording');
+                if (!chatInFlight) {
+                    chatInput.disabled = false;
+                    chatBtnSend.disabled = false;
+                }
+            };
+            reader.onerror = function () {
+                showChatError('Failed to read audio file. Try again or type your message.');
+                btnMic.classList.remove('recording');
+                chatInput.disabled = false;
+                chatBtnSend.disabled = false;
+            };
+            reader.readAsArrayBuffer(file);
+
+            // Reset so same file can be re-selected
+            fileInput.value = '';
+        });
+
+        btnMic.addEventListener('click', function () {
+            if (chatInFlight) return;
+            if (!httpFallbackShown) {
+                showChatError('\uD83C\uDFA4 Voice input uses file upload over HTTP. Select an audio file to transcribe.');
+                httpFallbackShown = true;
+                setTimeout(clearChatError, 5000);
+            }
+            fileInput.click();
+        });
+
+        return;
+    }
+
+    // --- Original MediaRecorder path (HTTPS only) ---
     let mediaRecorder = null;
     let audioChunks = [];
     let recording = false;
