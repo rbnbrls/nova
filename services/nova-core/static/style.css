@@ -2192,3 +2192,34 @@ body {
     }
 }
 
+/* Touch device hover suppression (Phase 1) */
+@media (hover: none) and (pointer: coarse) {
+    .glass-panel:hover {
+        border-color: var(--border-color);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    .btn-primary:hover {
+        background: var(--accent-color);
+    }
+
+    .settings-cog-btn:hover {
+        color: var(--text-secondary);
+        background: none;
+    }
+
+    .chat-user-tab:hover {
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--text-secondary);
+    }
+
+    .chat-input-row .btn-mic:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .nav-item:hover {
+        background: transparent;
+    }
+}
+
