@@ -1210,92 +1210,88 @@ function clearChatError() {
     if (el) el.classList.add('hidden');
 }
 
-// --- Voice Input (quick task) ---
-// Press-and-hold mic button using the browser Web Speech API. Transcript flows
-// into the existing #chat-input / handleChatSubmit() path — no backend changes.
+// --- Voice Input (press-and-hold mic button) ---
+// Records audio via MediaRecorder (universal browser support), converts to
+// 16 kHz mono WAV on the client, uploads to /dashboard/transcribe which
+// sends it to wyoming-whisper, then submits the transcript via the existing
+// /dashboard/chat path.
 (function initVoiceInput() {
     const btnMic = document.getElementById('chat-btn-mic');
     const chatInput = document.getElementById('chat-input');
     const chatBtnSend = document.getElementById('chat-btn-send');
     if (!btnMic || !chatInput || !chatBtnSend) return;
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    // Graceful degradation: leave the mic button disabled on unsupported browsers
-    if (!SpeechRecognition) return;
+    // Graceful degradation: leave disabled if MediaRecorder unavailable
+    if (!window.MediaRecorder || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
-
-    let voiceInFlight = false;      // recognition currently active
-    let didTranscribe = false;       // a final transcript was captured this press
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recording = false;
+    let stream = null;
 
     function resetRecordingUI() {
         btnMic.classList.remove('recording');
-        voiceInFlight = false;
-        // Re-enable inputs unless an existing chat submission is in flight
+        recording = false;
         if (!chatInFlight) {
             chatInput.disabled = false;
             chatBtnSend.disabled = false;
         }
     }
 
-    // --- Recognition lifecycle handlers ---
-    recognition.onresult = function (event) {
-        const last = event.results[event.results.length - 1];
-        if (last && last[0] && last[0].transcript) {
-            const transcript = String(last[0].transcript).trim();
-            if (transcript) {
-                chatInput.value = transcript;
-                didTranscribe = true;
-            }
-        }
-    };
-
-    recognition.onerror = function (event) {
-        console.warn('Speech recognition error:', (event && event.error) || event);
-        resetRecordingUI();
-        showChatError('Voice input failed. Try again or type your message.');
-    };
-
-    recognition.onend = function () {
-        resetRecordingUI();
-    };
-
-    // --- Press-and-hold handlers (mouse + touch + pointer) ---
-    function startHold(e) {
+    // --- Press-and-hold handlers ---
+    async function startHold(e) {
         e.preventDefault();
-        if (chatInFlight || voiceInFlight) return;
-        voiceInFlight = true;
-        didTranscribe = false;
-        btnMic.classList.add('recording');
-        chatInput.disabled = true;
-        chatBtnSend.disabled = true;
+        if (chatInFlight || recording) return;
         clearChatError();
+
         try {
-            recognition.start();
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            btnMic.classList.add('recording');
+            chatInput.disabled = true;
+            chatBtnSend.disabled = true;
+
+            audioChunks = [];
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = function (e) {
+                if (e.data.size > 0) audioChunks.push(e.data);
+            };
+            mediaRecorder.onstop = async function () {
+                if (stream) {
+                    stream.getTracks().forEach(function (t) { t.stop(); });
+                    stream = null;
+                }
+                try {
+                    const blob = new Blob(audioChunks);
+                    const wavBlob = await audioBlobToWav(blob, 16000);
+                    await transcribeAndSubmit(wavBlob);
+                } catch (err) {
+                    console.warn('Voice processing failed:', err);
+                    showChatError('Voice processing failed. Try again or type your message.');
+                }
+                resetRecordingUI();
+            };
+
+            recording = true;
+            mediaRecorder.start();
         } catch (err) {
-            // recognition may throw if started twice in quick succession
-            console.warn('recognition.start() threw:', err);
+            console.warn('Microphone access error:', err);
+            if (err.name === 'NotAllowedError') {
+                showChatError('Microphone access blocked. Grant microphone permission or use HTTPS (https://nova.local).');
+            } else if (err.name === 'NotFoundError') {
+                showChatError('No microphone found.');
+            } else {
+                showChatError('Could not access microphone: ' + (err.message || err));
+            }
             resetRecordingUI();
         }
     }
 
     function endHold(e) {
-        if (!voiceInFlight) return;
+        if (!recording || !mediaRecorder) return;
         if (e) e.preventDefault();
-        try {
-            recognition.stop();
-        } catch (err) {
-            console.warn('recognition.stop() threw:', err);
-        }
-        // Capture the transcript locally before reset (recognition.onend will reset UI)
-        const transcript = chatInput.value.trim();
-        resetRecordingUI();
-        if (didTranscribe || transcript) {
-            // Submit through existing /dashboard/chat path
-            handleChatSubmit();
+        if (mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
         }
     }
 
@@ -1309,9 +1305,90 @@ function clearChatError() {
     btnMic.addEventListener('pointerup', endHold);
     btnMic.addEventListener('pointercancel', endHold);
 
-    // Enable the mic button only on supported browsers
+    // Enable the mic button (MediaRecorder is available)
     btnMic.disabled = false;
 })();
+
+// --- WAV conversion helper ---
+// Decodes the recorded blob (WebM/Opus/etc) via AudioContext, resamples to the
+// target sample rate (16 kHz), and exports as a standard WAV file.
+async function audioBlobToWav(blob, targetSampleRate) {
+    var arrayBuffer = await blob.arrayBuffer();
+    var audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    var audioBuffer;
+    try {
+        audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    } catch (e) {
+        audioContext.close();
+        throw new Error('Audio decoding failed: ' + e.message);
+    }
+
+    // Resample via OfflineAudioContext
+    var offlineCtx = new OfflineAudioContext(
+        1,
+        Math.ceil(audioBuffer.length * targetSampleRate / audioBuffer.sampleRate),
+        targetSampleRate
+    );
+    var source = offlineCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(offlineCtx.destination);
+    source.start();
+    var renderedBuffer = await offlineCtx.startRendering();
+
+    // Float32 → 16-bit PCM
+    var channelData = renderedBuffer.getChannelData(0);
+    var pcm16 = new Int16Array(channelData.length);
+    for (var i = 0; i < channelData.length; i++) {
+        var s = Math.max(-1, Math.min(1, channelData[i]));
+        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+
+    // Build WAV header (44 bytes) + PCM data
+    var dataLength = pcm16.length * 2;
+    var headerBuf = new ArrayBuffer(44);
+    var dv = new DataView(headerBuf);
+    function wavStr(view, offset, str) {
+        for (var j = 0; j < str.length; j++) view.setUint8(offset + j, str.charCodeAt(j));
+    }
+    wavStr(dv, 0, 'RIFF');
+    dv.setUint32(4, 36 + dataLength, true);
+    wavStr(dv, 8, 'WAVE');
+    wavStr(dv, 12, 'fmt ');
+    dv.setUint32(16, 16, true);
+    dv.setUint16(20, 1, true);       // PCM
+    dv.setUint16(22, 1, true);       // mono
+    dv.setUint32(24, targetSampleRate, true);
+    dv.setUint32(28, targetSampleRate * 2, true);
+    dv.setUint16(32, 2, true);       // block align
+    dv.setUint16(34, 16, true);      // bits per sample
+    wavStr(dv, 36, 'data');
+    dv.setUint32(40, dataLength, true);
+
+    audioContext.close();
+    return new Blob([headerBuf, pcm16.buffer], { type: 'audio/wav' });
+}
+
+// --- Upload WAV to backend and submit transcript ---
+async function transcribeAndSubmit(wavBlob) {
+    var formData = new FormData();
+    formData.append('audio', wavBlob, 'recording.wav');
+
+    try {
+        var resp = await fetch('/dashboard/transcribe', { method: 'POST', body: formData });
+        var data = await resp.json();
+        if (resp.ok && data.transcript) {
+            var input = document.getElementById('chat-input');
+            if (input) {
+                input.value = data.transcript;
+                handleChatSubmit();
+            }
+        } else {
+            showChatError(data.detail || 'Transcription failed. Please try again.');
+        }
+    } catch (err) {
+        showChatError('Network error during transcription. Please try again.');
+    }
+}
 
 // --- Settings Modal (cog icon) ---
 const settingsModal = document.getElementById('settings-modal');
