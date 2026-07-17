@@ -7,8 +7,43 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <div id="nav-backdrop" class="nav-backdrop hidden"></div>
+    <nav id="nav-menu" class="nav-menu hidden" role="navigation" aria-label="Main navigation">
+        <div class="nav-menu-inner">
+            <div class="nav-header">Nova</div>
+
+            <a href="/dashboard" class="nav-item nav-item-back" data-nav-type="page">← Back to Dashboard</a>
+
+            <!-- PAGES -->
+            <div class="nav-section-label">Pages</div>
+            <div class="nav-divider"></div>
+            <a href="/dashboard" class="nav-item" data-nav-type="page">🏠 Dashboard</a>
+            <a href="/admin" class="nav-item active" data-nav-type="page">⚙ Admin Panel</a>
+
+            <!-- SECTIONS -->
+            <div class="nav-section-label">Sections</div>
+            <div class="nav-divider"></div>
+            <button class="nav-item" data-nav-type="scroll" data-scroll-to="tasks-panel">✓ Active Todos</button>
+            <button class="nav-item" data-nav-type="scroll" data-scroll-to="events-panel">📅 Agenda</button>
+            <button class="nav-item" data-nav-type="scroll" data-scroll-to="chat-panel">💬 Ask Nova</button>
+            <button class="nav-item" data-nav-type="scroll" data-scroll-to="audit-panel">📋 Activity Feed</button>
+            <button class="nav-item" data-nav-type="scroll" data-scroll-to="traces-panel">⏱ Response Times</button>
+
+            <!-- SETTINGS -->
+            <div class="nav-section-label">Settings</div>
+            <div class="nav-divider"></div>
+            <button class="nav-item" data-nav-type="modal" data-modal-id="settings-modal">🔗 Identity & Settings</button>
+
+            <!-- LINKS -->
+            <div class="nav-section-label">Links</div>
+            <div class="nav-divider"></div>
+            <a href="https://homeassistant.local:8123" class="nav-item nav-item-external" target="_blank" rel="noopener noreferrer" data-nav-type="external">🏠 Home Assistant ↗</a>
+            <a href="https://caldav.local" class="nav-item nav-item-external" target="_blank" rel="noopener noreferrer" data-nav-type="external">📅 CalDAV Calendar ↗</a>
+        </div>
+    </nav>
     <div class="dashboard-container">
         <header class="dashboard-header">
+            <button id="btn-hamburger" class="btn-hamburger" aria-label="Open navigation menu" aria-expanded="false" title="Menu">☰</button>
             <div class="logo-area">
                 <h1>Nova <span>Admin</span></h1>
                 <div class="status-indicator">
