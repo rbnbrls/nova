@@ -1,5 +1,5 @@
 # Nova stack — deployed on the "Nova AI" VM, orchestrated by Coolify (Phase 1).
-# GPU containers (ollama, whisper) use the NVIDIA Container Toolkit.
+# ollama and whisper run on CPU (no GPU available on this host).
 # For local dev without Coolify: `docker compose up -d`.
 
 services:
@@ -54,14 +54,6 @@ services:
       - ./data/ollama:/root/.ollama
     restart: unless-stopped
     mem_limit: 10g
-    # GPU passthrough (requires NVIDIA Container Toolkit on the host)
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     networks:
       - nova-net
 
@@ -75,13 +67,6 @@ services:
       - ./data/whisper:/data
     restart: unless-stopped
     mem_limit: 3g
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     networks:
       - nova-net
 
