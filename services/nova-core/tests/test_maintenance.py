@@ -117,6 +117,7 @@ async def test_dep_scan_with_outdated():
     with (
         patch("app.maintenance.dependency_scanner._run_cmd") as mock_run_cmd,
         patch("app.maintenance.dependency_scanner.ForgejoClient", return_value=mock_forgejo),
+        patch("app.maintenance.dependency_scanner._bump_package", new_callable=AsyncMock) as mock_bump,
         patch("app.config.settings.maintenance_dep_check_enabled", True),
         patch("app.config.settings.forgejo_token", "test-token"),
         patch("app.config.settings.forgejo_url", "https://git.example.com"),
@@ -148,6 +149,8 @@ async def test_dep_scan_with_outdated():
 
         await run_dependency_scan()
 
+    mock_bump.assert_awaited_once()
+
     mock_forgejo.create_issue.assert_called_once()
     call_kwargs = mock_forgejo.create_issue.call_args[1]
     assert "dependency update" in call_kwargs["title"]
@@ -168,6 +171,7 @@ async def test_dep_scan_tests_fail():
     with (
         patch("app.maintenance.dependency_scanner._run_cmd") as mock_run_cmd,
         patch("app.maintenance.dependency_scanner.ForgejoClient", return_value=mock_forgejo),
+        patch("app.maintenance.dependency_scanner._bump_package", new_callable=AsyncMock),
         patch("app.config.settings.maintenance_dep_check_enabled", True),
         patch("app.config.settings.forgejo_token", "test-token"),
         patch("app.config.settings.forgejo_url", "https://git.example.com"),
