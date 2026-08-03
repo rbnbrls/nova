@@ -51,16 +51,25 @@ from .progress import get_progress_queue
 
 
 def _configure_logging() -> None:
-    """Attach a stream handler to the root logger so Nova's logs reach stdout.
+    """Attach a stream handler to the ``nova-core`` logger so Nova's logs reach stdout.
 
-    uvicorn only configures its own loggers; without a handler on the root
-    logger every log.info(...) from the "nova-core" logger family is silently
-    dropped, which made the app appear to produce no logs at all.
+    uvicorn only configures its own loggers, and alembic's ``fileConfig``
+    (run at migration time in the lifespan) resets the *root* logger to WARN
+    with its own handler — so configuring the root logger from here gets
+    overwritten. Binding the handler to the ``nova-core`` logger itself (with
+    ``propagate=False``) survives both, and makes every log.info(...) from the
+    app visible in ``docker logs`` / Coolify.
     """
-    logging.basicConfig(
-        level=settings.nova_log_level.upper(),
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    logger = logging.getLogger("nova-core")
+    if logger.handlers:
+        return
+    logger.setLevel(settings.nova_log_level.upper())
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
     )
+    logger.addHandler(handler)
+    logger.propagate = False
 
 
 _configure_logging()
