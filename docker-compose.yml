@@ -75,7 +75,7 @@ services:
   # --- Voice I/O (Phase 6). Wired into Home Assistant's Assist pipeline via Wyoming. ---
   whisper:
     image: rhasspy/wyoming-whisper:latest
-    command: --model small --language nl --uri tcp://0.0.0.0:10300
+    command: --model small --language nl --device cuda --compute-type float16 --uri tcp://0.0.0.0:10300
     ports:
       - "10300:10300"
     volumes:
