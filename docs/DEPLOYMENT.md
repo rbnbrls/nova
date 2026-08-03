@@ -3,7 +3,8 @@
 # Deployment
 
 Nova is a self-hosted household AI assistant deployed as a Docker Compose stack on a Proxmox
-VM (CPU-only — the Proxmox host has **no NVIDIA GPU** installed). Deployments are git-driven
+VM (GPU-accelerated — the host has an NVIDIA RTX PRO 2000 Blackwell passed through to the
+nova-ai VM). Deployments are git-driven
 via **Coolify** — push to `main` and Coolify rebuilds and redeploys each service. Secrets live
 in Coolify, never in git.
 
@@ -19,9 +20,12 @@ in Coolify, never in git.
 Deployment is fully containerized — the Dockerfiles are at `services/nova-core/Dockerfile` and
 `services/ops-bridge/Dockerfile`, both multi-stage builds (base → tester → final) on Python 3.12.
 
-All services run **CPU-only** — the host has no NVIDIA GPU, so `ollama` and `whisper` must NOT
-use `deploy.resources.reservations.devices` GPU passthrough (removed in commit `ef497b0`; adding
-it back prevents both containers from starting and cascades to nova-core → caddy).
+`ollama` and `whisper` use GPU passthrough via `deploy.resources.reservations.devices` (driver
+`nvidia`) — this requires the **NVIDIA Container Toolkit** installed and the `nvidia` Docker
+runtime configured on the deployment host (nova-ai VM). The host's RTX PRO 2000 is passed
+through to the VM (Proxmox `hostpci0: mapping=rtx-pro-2000,pcie=1`); without a working NVIDIA
+driver/container runtime inside the VM, the GPU blocks prevent both containers from starting
+(stuck in "Created", Pid=0) and cascade to nova-core → caddy.
 
 > **Known deployment pitfall (2026-08-03):** the Coolify server setting `delete_unused_networks`
 > (plus the daily cleanup job `0 0 * * *`) can prune the `coolify` Docker network while no app is
