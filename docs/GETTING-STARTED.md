@@ -2,11 +2,11 @@
 
 # Getting Started with Nova
 
-This guide walks you through setting up Nova — a private, self-hosted AI household assistant — on a Linux server (CPU-only; no GPU required).
+This guide walks you through setting up Nova — a private, self-hosted AI household assistant — on a Linux server with an NVIDIA GPU (the reference Proxmox VM has an RTX PRO 2000 passed through).
 
 ## Prerequisites
 
-- **Hardware:** Any Linux server (Nova runs CPU-only — the reference Proxmox VM has no NVIDIA GPU). ~16 GB RAM recommended so Ollama can hold the `qwen3:14b` model.
+- **Hardware:** Linux server with an NVIDIA GPU (Nova runs GPU-accelerated — the reference Proxmox VM has an RTX PRO 2000 Blackwell passed through). The NVIDIA Container Toolkit must be installed on the Docker host for `ollama`/`whisper` GPU passthrough. ~16 GB RAM recommended so Ollama can hold the `qwen3:14b` model.
 - **Operating system:** Linux with Docker Engine and the Compose plugin installed.
 - **Docker & Docker Compose:** Docker Engine with the Compose plugin. Nova is deployed as a multi-container Docker stack.
 - **Git:** To clone the repository.
@@ -70,14 +70,18 @@ This guide walks you through setting up Nova — a private, self-hosted AI house
 ## Common Setup Issues
 
 ### "GPU not detected" / very slow responses
-Nova runs Ollama on the **CPU** (the Proxmox host has no GPU). First-token latency will be
-higher than a GPU setup — that is expected. Verify the model is loaded and serving:
+Nova runs Ollama and Whisper on the **GPU** (RTX PRO 2000 passed through to the VM). If you see
+CPU-only behavior (float16 → float32 warnings in whisper, `total_vram="0 B"` in ollama logs),
+check that the NVIDIA driver is loaded and the NVIDIA Container Toolkit `nvidia` runtime is
+configured on the Docker host:
 ```bash
-docker compose exec ollama ollama ps
-docker compose exec ollama ollama list
+nvidia-smi                       # driver must show the GPU
+docker info | grep -i runtime    # must include 'nvidia'
+docker compose exec ollama nvidia-smi
 ```
-Do NOT add `deploy.resources.reservations.devices` GPU blocks to `docker-compose.yml`: with no
-NVIDIA driver on the host, ollama/whisper then fail to start (stuck in "Created", Pid=0).
+The `deploy.resources.reservations.devices` GPU blocks in `docker-compose.yml` require the
+`nvidia` runtime; without a working NVIDIA driver/container runtime on the host, ollama/whisper
+fail to start (stuck in "Created", Pid=0).
 
 ### Model not pulled / service times out
 If Nova Core responds with an error about the model not being found, you need to pull the model into Ollama first:

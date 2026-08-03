@@ -37,7 +37,7 @@ docker compose up -d
 The stack includes:
 - **nova-core** — FastAPI agent loop (Python 3.12)
 - **postgres** — pgvector/pg16 for tasks, memory, and audit logging
-- **ollama** — local LLM serving (CPU-only; the Proxmox host has no GPU)
+- **ollama** — local LLM serving (GPU-accelerated via the host's RTX PRO 2000)
 - **whisper** / **piper** — voice STT/TTS (Wyoming protocol, Phase 6)
 - **radicale** — self-hosted CalDAV calendar
 - **caddy** — reverse proxy (LAN dashboard, API, WhatsApp webhook)
@@ -95,7 +95,7 @@ GET  /webhooks/whatsapp    # webhook verification handshake
 
 | Phase | What | Status |
 |------:|------|--------|
-| 0 | Proxmox infra: Docker, CPU-only host (no GPU present) | host setup |
+| 0 | Proxmox infra: Docker, GPU host (RTX PRO 2000 passed through to the VM) | host setup |
 | 1 | Coolify self-hosted CI/CD (git push-to-deploy) | host setup |
 | 2 | Local runtime: Ollama + Postgres/pgvector | scaffolded |
 | 3 | **Nova Core**: agent loop, identity, memory, OpenAI API | **scaffolded** |
