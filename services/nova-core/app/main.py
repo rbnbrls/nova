@@ -49,6 +49,22 @@ from . import whisper
 from .scheduler import check_new_emails, send_morning_briefing, check_overdue_tasks, check_at_risk_tasks, run_briefing_scheduler, process_queued_notifications, purge_old_audit_logs, run_maintenance_dep_scan, run_maintenance_log_anomaly, run_maintenance_backup_verify, run_maintenance_trend_report
 from .progress import get_progress_queue
 
+
+def _configure_logging() -> None:
+    """Attach a stream handler to the root logger so Nova's logs reach stdout.
+
+    uvicorn only configures its own loggers; without a handler on the root
+    logger every log.info(...) from the "nova-core" logger family is silently
+    dropped, which made the app appear to produce no logs at all.
+    """
+    logging.basicConfig(
+        level=settings.nova_log_level.upper(),
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+
+
+_configure_logging()
+
 log = logging.getLogger("nova-core")
 
 voice_room_manager: RoomSessionManager | None = None
