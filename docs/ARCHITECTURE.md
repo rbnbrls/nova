@@ -4,9 +4,9 @@
 
 ## System overview
 
-Nova is a private, self-hosted AI household assistant running on a local Proxmox server (PNY RTX 2000 Blackwell, ~16 GB VRAM). It provides a shared household plan — tasks, calendar, and email triage — reachable over WhatsApp, Telegram, voice (ESPHome satellites + iPhone via Home Assistant Assist), and a LAN dashboard. The architecture follows a **channel-agnostic agent loop** pattern: every text or voice input funnels into a single FastAPI service (Nova Core) that runs the same LLM→tools reasoning loop, with channel adapters handling inbound/outbound transport differences.
+Nova is a private, self-hosted AI household assistant running on a local Proxmox server (CPU-only — the host has no NVIDIA GPU). It provides a shared household plan — tasks, calendar, and email triage — reachable over WhatsApp, Telegram, voice (ESPHome satellites + iPhone via Home Assistant Assist), and a LAN dashboard. The architecture follows a **channel-agnostic agent loop** pattern: every text or voice input funnels into a single FastAPI service (Nova Core) that runs the same LLM→tools reasoning loop, with channel adapters handling inbound/outbound transport differences.
 
-All reasoning runs locally via Ollama on the GPU; no prompts or household data leave the server. Only the WhatsApp (Meta Cloud API) and Outlook (Microsoft Graph) channels reach the internet by their nature.
+All reasoning runs locally via Ollama (CPU-only); no prompts or household data leave the server. Only the WhatsApp (Meta Cloud API) and Outlook (Microsoft Graph) channels reach the internet by their nature.
 
 ## Component diagram
 

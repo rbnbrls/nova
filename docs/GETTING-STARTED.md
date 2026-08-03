@@ -2,12 +2,12 @@
 
 # Getting Started with Nova
 
-This guide walks you through setting up Nova — a private, self-hosted AI household assistant — on a server with an NVIDIA GPU.
+This guide walks you through setting up Nova — a private, self-hosted AI household assistant — on a Linux server (CPU-only; no GPU required).
 
 ## Prerequisites
 
-- **Hardware:** A server with an NVIDIA GPU (Nova is designed for the PNY RTX 2000 Blackwell, ~16 GB VRAM).
-- **Operating system:** Linux with the NVIDIA Container Toolkit installed (required for GPU passthrough to Docker containers).
+- **Hardware:** Any Linux server (Nova runs CPU-only — the reference Proxmox VM has no NVIDIA GPU). ~16 GB RAM recommended so Ollama can hold the `qwen3:14b` model.
+- **Operating system:** Linux with Docker Engine and the Compose plugin installed.
 - **Docker & Docker Compose:** Docker Engine with the Compose plugin. Nova is deployed as a multi-container Docker stack.
 - **Git:** To clone the repository.
 - **Python >= 3.12:** For local development outside of Docker. The Docker containers include Python automatically.
@@ -69,13 +69,15 @@ This guide walks you through setting up Nova — a private, self-hosted AI house
 
 ## Common Setup Issues
 
-### "GPU not detected" or very slow responses
-Ollama requires the NVIDIA Container Toolkit to access the GPU. Verify it's installed:
+### "GPU not detected" / very slow responses
+Nova runs Ollama on the **CPU** (the Proxmox host has no GPU). First-token latency will be
+higher than a GPU setup — that is expected. Verify the model is loaded and serving:
 ```bash
-nvidia-smi
-docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi
+docker compose exec ollama ollama ps
+docker compose exec ollama ollama list
 ```
-If the Docker command fails, install the toolkit following [NVIDIA's instructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
+Do NOT add `deploy.resources.reservations.devices` GPU blocks to `docker-compose.yml`: with no
+NVIDIA driver on the host, ollama/whisper then fail to start (stuck in "Created", Pid=0).
 
 ### Model not pulled / service times out
 If Nova Core responds with an error about the model not being found, you need to pull the model into Ollama first:

@@ -3,8 +3,9 @@
 # Deployment
 
 Nova is a self-hosted household AI assistant deployed as a Docker Compose stack on a Proxmox
-VM (PNY RTX 2000 Blackwell, ~16 GB VRAM). Deployments are git-driven via **Coolify** — push to
-`main` and Coolify rebuilds and redeploys each service. Secrets live in Coolify, never in git.
+VM (CPU-only — the Proxmox host has **no NVIDIA GPU** installed). Deployments are git-driven
+via **Coolify** — push to `main` and Coolify rebuilds and redeploys each service. Secrets live
+in Coolify, never in git.
 
 ## Deployment targets
 
@@ -18,8 +19,15 @@ VM (PNY RTX 2000 Blackwell, ~16 GB VRAM). Deployments are git-driven via **Cooli
 Deployment is fully containerized — the Dockerfiles are at `services/nova-core/Dockerfile` and
 `services/ops-bridge/Dockerfile`, both multi-stage builds (base → tester → final) on Python 3.12.
 
-GPU-dependent services (ollama, whisper) require the **NVIDIA Container Toolkit** on the host
-and use GPU passthrough via the `deploy.resources.reservations.devices` Docker Compose directive.
+All services run **CPU-only** — the host has no NVIDIA GPU, so `ollama` and `whisper` must NOT
+use `deploy.resources.reservations.devices` GPU passthrough (removed in commit `ef497b0`; adding
+it back prevents both containers from starting and cascades to nova-core → caddy).
+
+> **Known deployment pitfall (2026-08-03):** the Coolify server setting `delete_unused_networks`
+> (plus the daily cleanup job `0 0 * * *`) can prune the `coolify` Docker network while no app is
+> running, breaking the next deploy with `Error response from daemon: network coolify not found`.
+> Keep that setting disabled, or recreate the network with
+> `docker network create coolify --attachable` on the deployment server.
 
 ## Build pipeline
 
