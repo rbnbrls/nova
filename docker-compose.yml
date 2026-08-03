@@ -54,6 +54,12 @@ services:
       - ./data/ollama:/root/.ollama
     restart: unless-stopped
     mem_limit: 10g
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - nova-net
 
@@ -67,6 +73,12 @@ services:
       - ./data/whisper:/data
     restart: unless-stopped
     mem_limit: 3g
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 10300), 3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     networks:
       - nova-net
 
@@ -78,6 +90,12 @@ services:
     volumes:
       - ./data/piper:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 10200), 3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     networks:
       - nova-net
 
@@ -94,6 +112,12 @@ services:
       - ./infra/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "^/usr/local/bin/vector$"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     networks:
       - nova-net
 
@@ -129,6 +153,12 @@ services:
       exec /venv/bin/radicale --config /config/config
       '
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "5232"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       - nova-net
 
@@ -143,6 +173,12 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     networks:
       - nova-net
 
